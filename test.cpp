@@ -1,5 +1,5 @@
-#include "serialfm.h"
-#include "serialfm_sgd.h"
+#include "fm.h"
+#include "fm_sgd.h"
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -18,14 +18,6 @@
 // =================
 // Helper Functions
 // =================
-
-// I/O routines
-void save(std::ofstream& fsav) {
-}
-
-// Particle Initialization
-void init_particles() {
-}
 
 // Command Line Option Processing
 int find_arg_idx(int argc, char** argv, const char* option) {
@@ -180,6 +172,8 @@ int main(int argc, char** argv) {
 			}
 		}
 
+		auto start_time = std::chrono::steady_clock::now();
+
 		// () learn		
 		fml->learn(train, test);
 
@@ -195,6 +189,12 @@ int main(int argc, char** argv) {
 			pred.save(cmdline.getValue(param_out));	
 		}
         */
+		auto end_time = std::chrono::steady_clock::now();
+		std::chrono::duration<double> diff = end_time - start_time;
+		double seconds = diff.count();
+
+		// Finalize
+		std::cout << "Simulation Time = " << seconds << " seconds \n";
 				 	
 
 	} catch (std::string &e) {

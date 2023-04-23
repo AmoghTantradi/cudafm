@@ -4,8 +4,8 @@
 #include <limits>
 #include "./util/matrix.h"
 #include "./util/fmatrix.h"
-#include "./fm_data.h"
-#include "./serialfm.h"
+#include "fm_data.h"
+#include "fm.h"
 
 typedef FM_FLOAT DATA_FLOAT;
 

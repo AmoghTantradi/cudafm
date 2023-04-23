@@ -3,7 +3,7 @@
 
 #include <cmath>
 #include "Data.h"
-#include "./serialfm.h"
+#include "fm.h"
 #include <iostream>
 
 class fm_learn {

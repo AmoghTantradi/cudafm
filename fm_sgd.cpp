@@ -1,5 +1,5 @@
-#ifndef FM_SGD_H_
-#define FM_SGD_H_
+#include "fm.h"
+#include "fm_sgd.h"
 
 void fm_SGD(fm_model* fm, const double& learn_rate, sparse_row<FM_FLOAT> &x, const double multiplier, DVector<double> &sum) {
 	if (fm->k0) {
@@ -20,5 +20,3 @@ void fm_SGD(fm_model* fm, const double& learn_rate, sparse_row<FM_FLOAT> &x, con
 		}
 	}
 }
-
-#endif

@@ -2,7 +2,7 @@
 #define FM_LEARN_SGD_H_
 
 #include "fm_learn.h"
-#include "serialfm_sgd.h"
+#include "fm_sgd.h"
 #include "util/matrix.h"
 
 class fm_learn_sgd: public fm_learn {
