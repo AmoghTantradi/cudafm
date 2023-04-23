@@ -11,17 +11,6 @@ fm_model::fm_model() {
 	k1 = true;
 }
 
-void fm_model::debug() {
-	std::cout << "num_attributes=" << num_attribute << std::endl;
-	std::cout << "use w0=" << k0 << std::endl;
-	std::cout << "use w1=" << k1 << std::endl;
-	std::cout << "dim v =" << num_factor << std::endl;
-	std::cout << "reg_w0=" << reg0 << std::endl;
-	std::cout << "reg_w=" << regw << std::endl;
-	std::cout << "reg_v=" << regv << std::endl; 
-	std::cout << "init ~ N(" << init_mean << "," << init_stdev << ")" << std::endl;
-}
-
 void fm_model::init() {
 	w0 = 0;
 	w.setSize(num_attribute);

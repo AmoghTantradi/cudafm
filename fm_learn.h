@@ -13,7 +13,6 @@ class fm_learn {
   virtual double evaluate(Data& data);
   virtual void learn(Data& train, Data& test);
   virtual void predict(Data& data, DVector<double>& out) = 0;
-  virtual void debug();
   fm_model* fm;
   double min_target;
   double max_target;
@@ -63,11 +62,6 @@ double fm_learn::evaluate(Data& data) {
 void fm_learn::learn(Data& train, Data& test) {
 }
 
-void fm_learn::debug() {
-  std::cout << "task=" << task << std::endl;
-  std::cout << "min_target=" << min_target << std::endl;
-  std::cout << "max_target=" << max_target << std::endl;
-}
 
 double fm_learn::evaluate_classification(Data& data) {
   int num_correct = 0;

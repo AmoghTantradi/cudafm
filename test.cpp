@@ -180,15 +180,6 @@ int main(int argc, char** argv) {
 		// () Prediction at the end  (not for mcmc and als)
 		std::cout << "Final\t" << "Train=" << fml->evaluate(train) << "\tTest=" << fml->evaluate(test) << std::endl;
 
-		// () Save prediction
-        /*
-		if (cmdline.hasParameter(param_out)) {
-			DVector<double> pred;
-			pred.setSize(test.num_cases);
-			fml->predict(test, pred);
-			pred.save(cmdline.getValue(param_out));	
-		}
-        */
 		auto end_time = std::chrono::steady_clock::now();
 		std::chrono::duration<double> diff = end_time - start_time;
 		double seconds = diff.count();

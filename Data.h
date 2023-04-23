@@ -17,26 +17,11 @@ inline bool fileexists(std::string filename) {
 }
 // END: util.h
 
-class DataMetaInfo {
- public:
-  DataMetaInfo(uint num_attributes);
-
-  void loadGroupsFromFile(std::string filename);
-
-  void debug();
-
-  DVector<uint> attr_group; // attribute_id -> group_id
-  uint num_attr_groups;
-  DVector<uint> num_attr_per_group;
-  uint num_relations;
-};
-
 
 class Data {
  public:
   Data(uint64 cache_size, bool has_x, bool has_xt);
   void load(std::string filename);
-  void debug();
 
   LargeSparseMatrix<DATA_FLOAT>* data_t;
   LargeSparseMatrix<DATA_FLOAT>* data;
@@ -56,20 +41,6 @@ class Data {
   bool has_xt;
   bool has_x;
 };
-
-void DataMetaInfo::loadGroupsFromFile(std::string filename) {
-  assert(fileexists(filename));
-  attr_group.load(filename);
-  num_attr_groups = 0;
-  for (uint i = 0; i < attr_group.dim; i++) {
-    num_attr_groups = std::max(num_attr_groups, attr_group(i)+1);
-  }
-  num_attr_per_group.setSize(num_attr_groups);
-  num_attr_per_group.init(0);
-  for (uint i = 0; i < attr_group.dim; i++) {
-    num_attr_per_group(attr_group(i))++;
-  }
-}
 
 Data::Data(uint64 cache_size, bool has_x, bool has_xt) {
   this->data_t = NULL;

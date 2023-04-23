@@ -29,7 +29,6 @@ class fm_model {
 		double init_mean;
 		
 		fm_model();
-		void debug();
 		void init();
 		double predict(sparse_row<FM_FLOAT>& x);
 		double predict(sparse_row<FM_FLOAT>& x, DVector<double> &sum, DVector<double> &sum_sqr);
