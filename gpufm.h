@@ -1,6 +1,3 @@
-#ifndef FM_MODEL_
-#define FM_MODEL_
-
 #include "./util/matrix.h"
 #include "./util/fmatrix.h"
 
@@ -95,5 +92,3 @@ double fm_model::predict(sparse_row<FM_FLOAT>& x, DVector<double> &sum, DVector<
 	}
 	return result;
 }
-
-#endif

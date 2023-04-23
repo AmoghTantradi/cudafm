@@ -14,12 +14,12 @@ if (NOT "${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 endif ()
 
 
-add_executable(serial test.cpp serialfm.h serialfm_sgd.h util/matrix.h util/fmatrix.h util/random.h common.h)
+add_executable(serial test.cpp serialfm.h serialfm_sgd.h util/matrix.h util/fmatrix.h util/random.h)
 target_compile_features(serial PRIVATE cxx_std_14)
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_80")
 set_target_properties(serial PROPERTIES CUDA_ARCHITECTURES "80")
 
-add_executable(gpu main.cu gpufm.cu common.h)
+add_executable(gpu main.cu gpufm.h gpufm.cu gpufm_sgd.h gpufm_sgd.cu util/matrix.h util/fmatrix.h util/random.h)
 target_compile_features(gpu PRIVATE cxx_std_14)
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_80")
 set_target_properties(gpu PROPERTIES CUDA_ARCHITECTURES "80")
