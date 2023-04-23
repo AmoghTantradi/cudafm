@@ -1,27 +1,43 @@
-#ifndef __CS267_COMMON_H__
-#define __CS267_COMMON_H__
+#ifndef FM_MODEL_H_
+#define FM_MODEL_H_
 
-// Program Constants
-#define nsteps   1000
-#define savefreq 10
-#define density  0.0005
-#define mass     0.01
-#define cutoff   0.01
-#define min_r    (cutoff / 100)
-#define dt       0.0005
+#include "./util/matrix.h"
+#include "./util/fmatrix.h"
 
-// Particle Data Structure
-typedef struct particle_t {
-    double x;  // Position X
-    double y;  // Position Y
-    double vx; // Velocity X
-    double vy; // Velocity Y
-    double ax; // Acceleration X
-    double ay; // Acceleration Y
-} particle_t;
+#include "fm_data.h"
 
-// Simulation routine
-void init_simulation(particle_t* parts, int num_parts, double size);
-void simulate_one_step(particle_t* parts, int num_parts, double size);
+
+class fm_model {
+	private:
+		DVector<double> m_sum, m_sum_sqr;
+	public:
+		double w0;
+		DVectorDouble w;
+		DMatrixDouble v;
+
+	public:
+		// the following values should be set:
+		uint num_attribute;
+		
+		bool k0, k1;
+		int num_factor;
+		
+		double reg0;
+		double regw, regv;
+		
+		double init_stdev;
+		double init_mean;
+		
+		fm_model();
+		void debug();
+		void init();
+		double predict(sparse_row<FM_FLOAT>& x);
+		double predict(sparse_row<FM_FLOAT>& x, DVector<double> &sum, DVector<double> &sum_sqr);
+	
+};
+
+
+
+void fm_SGD(fm_model* fm, const double& learn_rate, sparse_row<FM_FLOAT> &x, const double multiplier, DVector<double> &sum);
 
 #endif
