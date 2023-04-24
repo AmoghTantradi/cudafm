@@ -19,7 +19,7 @@ template <typename T> struct sparse_entry {
     uint id;
     T value;
 };
-	
+
 template <typename T> struct sparse_row {
 	sparse_entry<T>* data;
 	uint size;

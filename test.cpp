@@ -1,5 +1,4 @@
 #include "fm.h"
-#include "fm_sgd.h"
 #include <chrono>
 #include <cmath>
 #include <cstring>
@@ -11,9 +10,6 @@
 
 #include "Data.h"
 #include "fm_learn.h"
-#include "fm_learn_sgd.h"
-#include "fm_learn_sgd_element.h"
-
 
 // =================
 // Helper Functions
@@ -60,9 +56,7 @@ int main(int argc, char** argv) {
 		const std::string param_task		= "c";
 		const std::string param_train_file	= "../data/ml-tag.train";
 		const std::string param_test_file	= "../data/ml-tag.test";
-
-		const std::string param_dim		= "'1,1,8'";
-		const std::string param_regular		= "’0,0,0.01’";
+		
 		double param_init_stdev	= 0.1;
 		int param_num_iter	= 100;
 		double param_learn_rate	= 0.01;
@@ -114,8 +108,8 @@ int main(int argc, char** argv) {
 		// (3) Setup the learning method:
 		fm_learn* fml;
 		if (! param_method.compare("sgd")) {
-	 		fml = new fm_learn_sgd_element();
-			((fm_learn_sgd*)fml)->num_iter = param_num_iter;
+	 		fml = new fm_learn();
+			fml->num_iter = param_num_iter;
 		} else {
 			throw "unknown method";
 		}
@@ -153,22 +147,16 @@ int main(int argc, char** argv) {
             }		
         }
 		{
-			fm_learn_sgd* fmlsgd= dynamic_cast<fm_learn_sgd*>(fml); 
-			if (fmlsgd) {
-				// set the learning rates (individual per layer)
-				{ 
-		 			std::vector<double> lr(1, param_learn_rate);
-					assert((lr.size() == 1) || (lr.size() == 3));
-					if (lr.size() == 1) {
-						fmlsgd->learn_rate = lr[0];
-						fmlsgd->learn_rates.init(lr[0]);
-					} else {
-						fmlsgd->learn_rate = 0;
-						fmlsgd->learn_rates(0) = lr[0];
-						fmlsgd->learn_rates(1) = lr[1];
-						fmlsgd->learn_rates(2) = lr[2];
-					}		
-				}
+			std::vector<double> lr(1, param_learn_rate);
+			assert((lr.size() == 1) || (lr.size() == 3));
+			if (lr.size() == 1) {
+				fml->learn_rate = lr[0];
+				fml->learn_rates.init(lr[0]);
+			} else {
+				fml->learn_rate = 0;
+				fml->learn_rates(0) = lr[0];
+				fml->learn_rates(1) = lr[1];
+				fml->learn_rates(2) = lr[2];
 			}
 		}
 
