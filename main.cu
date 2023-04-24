@@ -8,8 +8,6 @@
 #include <random>
 #include <vector>
 
-#include "Data.h"
-#include "fm_learn.h"
 
 // =================
 // Helper Functions
@@ -22,12 +20,13 @@
 // ==============
 
 int main(int argc, char** argv) {
+	/*
     srand ( time(NULL) );
 	try {
 		
 		const std::string param_task		= "c";
-		const std::string param_train_file	= "../data/ml-tag.train";
-		const std::string param_test_file	= "../data/ml-tag.test";
+		const std::string param_train_file	= "libfm_test.txt";
+		const std::string param_test_file	= "libfm_test.txt";
 
 		double param_init_stdev	= 0.1;
 		int param_num_iter	= 100;
@@ -153,7 +152,6 @@ int main(int argc, char** argv) {
 	} catch (char const* &e) {
 		std::cerr << std::endl << "ERROR: " << e << std::endl;
 	}
-
-
+	*/
 
 }
