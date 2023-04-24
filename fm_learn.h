@@ -10,11 +10,11 @@ class fm_learn {
  public:
   fm_learn();
   virtual void init();
-  virtual double evaluate(Data& data);
-  virtual void learn(Data& train, Data& test);
-  void SGD(sparse_row<DATA_FLOAT> &x, const double multiplier, DVector<double> &sum);
+  virtual double evaluate(Data* data);
+  virtual void learn(Data* train, Data* test);
+  void SGD(sparse_row<DATA_FLOAT> *x, const double multiplier, DVector<double> *sum);
 
-  virtual void predict(Data& data, DVector<double>& out);
+  virtual void predict(Data* data, DVector<double>* out);
   fm_model* fm;
   double min_target;
   double max_target;
@@ -29,9 +29,9 @@ class fm_learn {
   
  protected:
   // these functions can be overwritten (e.g. for MCMC)
-  virtual double evaluate_classification(Data& data);
-  virtual double evaluate_regression(Data& data);
-  virtual double predict_case(Data& data);
+  virtual double evaluate_classification(Data* data);
+  virtual double evaluate_regression(Data* data);
+  virtual double predict_case(Data* data);
 
   DVector<double> sum, sum_sqr;
   DMatrix<double> pred_q_term;

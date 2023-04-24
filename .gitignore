@@ -3,7 +3,7 @@ libfm/
 .idea/
 cmake-build-*/
 attentional_factorization_machine/
-#data/
+data/
 ml-latest-small/
 
 # Mac OS

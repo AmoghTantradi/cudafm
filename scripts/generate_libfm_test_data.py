@@ -7,7 +7,13 @@ Example Usage:
 ```py
 python generate_libfm_test_data.py -n 100 -f 50 -s 0.1 -o libfm_test_data.txt
 ```
+or on perlmutter:
+```py
+python3 generate_libfm_test_data.py -n 10000 -f 500 -s 0.1 -o libfm_test_data.txt
+```
 """
+
+np.random.seed(0)
 
 def generate_libfm_data(num_samples, num_features, sparsity, output_file):
     X = np.zeros((num_samples, num_features))

@@ -7,8 +7,8 @@
 
 bool LOG = false;
 
-double fm_learn::predict_case(Data& data) {
-  return fm->predict(data.data->getRow());
+double fm_learn::predict_case(Data* data) {
+  return fm->predict(data->data->getRow());
 }
 
 //done
@@ -25,7 +25,7 @@ void fm_learn::init() {
 }
 
 //done
-double fm_learn::evaluate(Data& data) {
+double fm_learn::evaluate(Data* data) {
   assert(data.data != NULL);
   if (task == TASK_REGRESSION) {
     return evaluate_regression(data);
@@ -37,7 +37,7 @@ double fm_learn::evaluate(Data& data) {
 }
 
 //done
-void fm_learn::learn(Data& train, Data& test) {
+void fm_learn::learn(Data* train, Data* test) {
     std::cout << "learnrate=" << learn_rate << std::endl;
     std::cout << "learnrates=" << learn_rates.get(0) << "," << learn_rates.get(1) << "," << learn_rates.get(2) << std::endl;
     std::cout << "#iterations=" << num_iter << std::endl;
@@ -47,17 +47,17 @@ void fm_learn::learn(Data& train, Data& test) {
     // SGD
     for (int i = 0; i < num_iter; i++) {
 
-        for (train.data->begin(); !train.data->end(); train.data->next()) {
-        double p = fm->predict(train.data->getRow(), sum, sum_sqr);
+        for (train->data->begin(); !train->data->end(); train->data->next()) {
+        double p = fm->predict(train->data->getRow(), sum, sum_sqr);
         double mult = 0;
         if (task == 0) {
             p = std::min(max_target, p);
             p = std::max(min_target, p);
-            mult = -(train.target(train.data->getRowIndex())-p);
+            mult = -(train->target(train->data->getRowIndex())-p);
         } else if (task == 1) {
-            mult = -train.target(train.data->getRowIndex())*(1.0-1.0/(1.0+exp(-train.target(train.data->getRowIndex())*p)));
+            mult = -train->target(train->data->getRowIndex())*(1.0-1.0/(1.0+exp(-train->target(train->data->getRowIndex())*p)));
         }
-        SGD(train.data->getRow(), mult, sum);
+        SGD(&train->data->getRow(), mult, &sum);
         }
         double rmse_train = evaluate(train);
         double rmse_test = evaluate(test);
@@ -70,30 +70,30 @@ void fm_learn::learn(Data& train, Data& test) {
 }
 
 //done
-void fm_learn::SGD(sparse_row<DATA_FLOAT> &x, const double multiplier, DVector<double> &sum) {
+void fm_learn::SGD(sparse_row<DATA_FLOAT> *x, const double multiplier, DVector<double> *sum) {
   if (fm->k0) {
 		double& w0 = fm->w0;
 		w0 -= learn_rate * (multiplier + fm->reg0 * w0);
 	}
 	if (fm->k1) {
-		for (uint i = 0; i < x.size; i++) {
-			double& w = fm->w(x.data[i].id);
-			w -= learn_rate * (multiplier * x.data[i].value + fm->regw * w);
+		for (uint i = 0; i < x->size; i++) {
+			double& w = fm->w(x->data[i].id);
+			w -= learn_rate * (multiplier * x->data[i].value + fm->regw * w);
 		}
 	}
 	for (int f = 0; f < fm->num_factor; f++) {
-		for (uint i = 0; i < x.size; i++) {
-			double& v = fm->v(f, x.data[i].id);
-			double grad = sum(f) * x.data[i].value - v * x.data[i].value * x.data[i].value; 
+		for (uint i = 0; i < x->size; i++) {
+			double& v = fm->v(f, x->data[i].id);
+			double grad = (*sum)(f) * x->data[i].value - v * x->data[i].value * x->data[i].value; 
 			v -= learn_rate * (multiplier * grad + fm->regv * v);
 		}
 	}
 }
 
 //predict
-void fm_learn::predict(Data& data, DVector<double>& out) {
-  assert(data.data->getNumRows() == out.dim);
-  for (data.data->begin(); !data.data->end(); data.data->next()) {
+void fm_learn::predict(Data* data, DVector<double>* out) {
+  assert(data->data->getNumRows() == out->dim);
+  for (data->data->begin(); !data->data->end(); data->data->next()) {
     double p = predict_case(data);
     if (task == TASK_REGRESSION ) {
       p = std::min(max_target, p);
@@ -103,33 +103,33 @@ void fm_learn::predict(Data& data, DVector<double>& out) {
     } else {
       throw "task not supported";
     }
-    out(data.data->getRowIndex()) = p;
+    (*out)(data->data->getRowIndex()) = p;
   }
 }
 
-double fm_learn::evaluate_classification(Data& data) {
+double fm_learn::evaluate_classification(Data* data) {
   int num_correct = 0;
-  for (data.data->begin(); !data.data->end(); data.data->next()) {
+  for (data->data->begin(); !data->data->end(); data->data->next()) {
     double p = predict_case(data);
-    if (((p >= 0) && (data.target(data.data->getRowIndex()) >= 0)) || ((p < 0) && (data.target(data.data->getRowIndex()) < 0))) {
+    if (((p >= 0) && (data->target(data->data->getRowIndex()) >= 0)) || ((p < 0) && (data->target(data->data->getRowIndex()) < 0))) {
       num_correct++;
     }
   }
 
-  return (double) num_correct / (double) data.data->getNumRows();
+  return (double) num_correct / (double) data->data->getNumRows();
 }
 
-double fm_learn::evaluate_regression(Data& data) {
+double fm_learn::evaluate_regression(Data* data) {
   double rmse_sum_sqr = 0;
   double mae_sum_abs = 0;
-  for (data.data->begin(); !data.data->end(); data.data->next()) {
+  for (data->data->begin(); !data->data->end(); data->data->next()) {
     double p = predict_case(data);
     p = std::min(max_target, p);
     p = std::max(min_target, p);
-    double err = p - data.target(data.data->getRowIndex());
+    double err = p - data->target(data->data->getRowIndex());
     rmse_sum_sqr += err*err;
     mae_sum_abs += std::abs((double)err);
   }
 
-  return std::sqrt(rmse_sum_sqr/data.data->getNumRows());
+  return std::sqrt(rmse_sum_sqr/data->data->getNumRows());
 }

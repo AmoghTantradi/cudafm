@@ -99,7 +99,7 @@ int main(int argc, char** argv) {
 				assert(dim.size() == 3);
 				fm.k0 = dim[0] != 0;
 				fm.k1 = dim[1] != 0;
-				fm.num_factor = dim[2];					
+				fm.num_factor = dim[2];
 			}			
 			fm.init();		
 			
@@ -163,10 +163,10 @@ int main(int argc, char** argv) {
 		auto start_time = std::chrono::steady_clock::now();
 
 		// () learn		
-		fml->learn(train, test);
+		fml->learn(&train, &test);
 
 		// () Prediction at the end  (not for mcmc and als)
-		std::cout << "Final\t" << "Train=" << fml->evaluate(train) << "\tTest=" << fml->evaluate(test) << std::endl;
+		std::cout << "Final\t" << "Train=" << fml->evaluate(&train) << "\tTest=" << fml->evaluate(&test) << std::endl;
 
 		auto end_time = std::chrono::steady_clock::now();
 		std::chrono::duration<double> diff = end_time - start_time;
