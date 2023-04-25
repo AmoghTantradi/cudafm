@@ -7,6 +7,8 @@
 #include <iostream>
 #include <random>
 #include <vector>
+#include "./util/fmatrix.h"
+#include "data.h"
 
 
 // =================
@@ -20,6 +22,31 @@
 // ==============
 
 int main(int argc, char** argv) {
+	const std::string param_train_file	= "../data/ml-tag.test.libfm";
+	Data train;
+	train.load(param_train_file);
+	/*
+	for (int i = 0; i < train.data.size(); i++) {
+		std :: cout <<train.target[i] << " ";
+		for (int j = 0; j < train.data[i]->size; j++) {
+			std::cout << train.data[i]->data[j].id << ":" << train.data[i]->data[j].value << " "; 
+		}
+		std::cout << std :: endl;
+	}
+	*/
+	fm_model fm(train.num_feature, 8);
+	fm.params.learn_rate = 0.02;
+	fm.params.task = 1;
+	fm.params.min_target = train.min_target;
+	fm.params.max_target = train.max_target;
+	auto start_time = std::chrono::steady_clock::now();
+	fm.learn(&train, &train, 100);
+	auto end_time = std::chrono::steady_clock::now();
+	std::chrono::duration<double> diff = end_time - start_time;
+	double seconds = diff.count();
+
+	// Finalize
+	std::cout << "Simulation Time = " << seconds << " seconds \n";
 	/*
     srand ( time(NULL) );
 	try {
