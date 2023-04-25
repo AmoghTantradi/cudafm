@@ -28,6 +28,8 @@ void save(std::ofstream& fsave, particle_t* parts, int num_parts, double size) {
     fsave << std::endl;
 }
 
+
+/*
 // Particle Initialization
 void init_particles(particle_t* parts, int num_parts, double size, int part_seed) {
     std::random_device rd;
@@ -58,6 +60,8 @@ void init_particles(particle_t* parts, int num_parts, double size, int part_seed
         parts[i].vy = rand_real(gen);
     }
 }
+*/
+
 
 // Command Line Option Processing
 int find_arg_idx(int argc, char** argv, const char* option) {
