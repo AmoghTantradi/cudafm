@@ -22,7 +22,7 @@
 // ==============
 
 int main(int argc, char** argv) {
-	const std::string param_train_file	= "../data/ml-tag.test.libfm";
+	const std::string param_train_file	= "../data/ml-tag.test.libfm"; // "libfm_test.txt";
 	Data train;
 	train.load(param_train_file);
 	/*

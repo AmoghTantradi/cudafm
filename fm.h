@@ -15,7 +15,15 @@ struct fm_params {
 	int num_factor;
 	double min_target;
 	double max_target;
-}; 
+};
+
+struct cudaArgs {
+	double* w0;
+	double* w;
+	double* v;
+	fm_params params;
+	double* ret;
+};
 //assume all pointers exist in CUDA
 class fm_model {
 	public:
@@ -25,7 +33,8 @@ class fm_model {
 		double* m_sum;
 		double* m_sum_sqr;
 		fm_params params;
-		fm_params* params_ptr;
+		cudaArgs* cuda_args;
+		double* ret;
 
 	public:
 		// the following values should be set:
