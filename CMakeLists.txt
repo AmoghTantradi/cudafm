@@ -16,14 +16,7 @@ endif ()
 
 add_executable(serial test.cpp fm.h fm.cpp fm_learn.h fm_learn.cpp Data.h Data.cpp util/matrix.h util/fmatrix.h util/random.h util/random.cpp)
 target_compile_features(serial PRIVATE cxx_std_14)
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_80")
-set_target_properties(serial PROPERTIES CUDA_ARCHITECTURES "80")
 
-add_executable(gpu main.cu fm.h fm.cu fm_learn.h fm_learn.cu Data.h Data.cpp util/matrix.h util/fmatrix.h util/random.h util/random.cpp)
-target_compile_features(gpu PRIVATE cxx_std_14)
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_80")
-set_target_properties(gpu PROPERTIES CUDA_ARCHITECTURES "80")
 
 # Copy the job scripts
-configure_file(job-gpu job-gpu COPYONLY)
 configure_file(job-serial job-serial COPYONLY)
