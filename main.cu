@@ -39,7 +39,7 @@ int main(int argc, char** argv) {
 	fm.params.min_target = train.min_target;
 	fm.params.max_target = train.max_target;
 	auto start_time = std::chrono::steady_clock::now();
-	fm.learn(&train, &train, 100);
+	fm.learn(&train, &train, 2);
 	auto end_time = std::chrono::steady_clock::now();
 	std::chrono::duration<double> diff = end_time - start_time;
 	double seconds = diff.count();
