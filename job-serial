@@ -1,0 +1,8 @@
+#!/bin/bash
+#SBATCH -N 1
+#SBATCH -C cpu
+#SBATCH -A mp309
+#SBATCH -t 00:30:00
+#SBATCH --gpus-per-node=4
+
+./serial

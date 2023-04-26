@@ -1,3 +1,10 @@
 build/
+libfm/
 .idea/
 cmake-build-*/
+attentional_factorization_machine/
+data/
+ml-latest-small/
+
+# Mac OS
+.DS_Store
