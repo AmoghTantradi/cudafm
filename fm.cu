@@ -8,40 +8,7 @@
 
 
 fm_model::fm_model(int n, int k) {
-	/*
-	cudaMalloc(&num_attribute, sizeof(int));
-	cudaMalloc(&num_factor, sizeof(int));
 
-	cudaMalloc(&w, sizeof(double) * n);
-
-	
-
-	cudaMalloc(&w0, sizeof(double));
-	
-	*num_attribute = n; //do in cuda memory
-	*num_factor = k; //do in cuda memory
-	init_mean = 0;
-	init_stdev = 0.01;
-
-	double* vTemp = (double*)malloc(n*k * sizeof(double));//initialize random, cuda malloc and copy into v
-	for (int i = 0; i < n*k; i++) {
-		vTemp[i] = ran_gaussian(init_mean, init_stdev);
-	}
-
-	
-	double* wTemp = (double*)malloc(n * sizeof(double));//initialize random, cuda malloc and copy into v
-	for (int i = 0; i < n; i++) {
-		wTemp[i] = ran_gaussian(init_mean, init_stdev);
-	}
-	
-	cudaMemcpy(w, wTemp, sizeof(double) * n, cudaMemcpyHostToDevice);
-	
-	free(wTemp);
-	double w0Temp = 0; //copy to cuda
-	cudaMemcpy(w0, &w0Temp, sizeof(double), cudaMemcpyHostToDevice);
-	//cuda malloc m_sum and m_sum_sqr
-	learn_rate = 0.01;
-	*/
 	init_mean = 0;
 	init_stdev = 0.01;
 
@@ -71,57 +38,6 @@ fm_model::fm_model(int n, int k) {
 	params.num_factor = k;
 }
 
-/*
-__global__ void cudaPredict(sparse_entry<DATA_FLOAT>* x, int xsize, int n, double* w0, double* w, double* v, double * pred) {
-
-}
-*/
-
-__global__ void cudaPredict(sparse_row_v<DATA_FLOAT>* x, double* sum, double* sum_sqr, cudaArgs* args) {
-	double pred = 0;
-	int tid = threadIdx.x + blockDim.x * blockIdx.x;
-	if (tid == 0) {
-		pred += *args->w0;
-	}
-	if (tid >= x->size)
-        return;
-	for (uint i = 0; i < x->size; i++) {
-		pred += args->w[x->data[i].id] * x->data[i].value;
-	}
-	for (int f = 0; f < args->params.num_factor; f++) {
-		sum[f] = 0;
-		sum_sqr[f] = 0;
-		for (uint i = 0; i < x->size; i++) {
-			double d = args->v[f*args->params.num_attribute + x->data[i].id] * x->data[i].value;
-			sum[f] += d;
-			sum_sqr[f] += d*d;
-		}
-		pred += 0.5 * (sum[f]*sum[f] - sum_sqr[f]);
-	}
-	*args->ret = pred;
-}
-
-/*
-double fm_model::predict(sparse_entry<DATA_FLOAT>* x, int xsize) {
-	return predict(x, xsize, m_sum, m_sum_sqr);
-}
-
-double fm_model::predict(sparse_entry<DATA_FLOAT>* x, int xsize, double* sum, double* sum_sqr) {
-	
-	double* pred; //cudamalloc this
-	double hostPred; 
-	cudaMalloc(&pred, sizeof(double));
-	
-	int blks = (xsize + NUM_THREADS-1)/NUM_THREADS;
-	cudaPredict<<<blks, NUM_THREADS>>>(x, xsize, num_attribute, num_factor, w0, w, v, sum, sum_sqr, pred);
-	//bring pred to host
-	cudaMemcpy(&hostPred, pred, sizeof(long), cudaMemcpyDeviceToHost);
-	cudaFree(pred);
-	
-	return hostPred;
-}
-
-*/
 
 // X data must be stored as vector of  where the sparse entry resides in cuda memory, Y data is stored as vector of doubles
 
@@ -137,16 +53,6 @@ double fm_model::evaluate(Data* data) {
     throw "unknown task";
   }
 }
-
-/*
-__global__ void printSparseRow(sparse_row_v<DATA_FLOAT>*vi) {
-	printf("hi %d\n", vi->size);
-	for (int j = 0; j < vi->size; j++) {
-		printf("%d:%f ", vi->data[j].id, vi->data[j].value); 
-	}
-	printf("\n");
-}
-*/
 
 //done
 void fm_model::learn(Data* train, Data* test, int num_iter) {
@@ -175,12 +81,16 @@ void fm_model::learn(Data* train, Data* test, int num_iter) {
 	args.ret = ret;
 	cudaMemcpy(cuda_args, &args, sizeof(cudaArgs), cudaMemcpyHostToDevice);
 	
-    for (int i = 0; i < num_iter; i++) {
 
+    for (int i = 0; i < num_iter; i++) {
+		// new version
+
+
+		// old version
         for (int j = 0; j < train->data.size(); j++) {
         	double p = predict(train->data[j], m_sum, m_sum_sqr);
 			//std:: cout << p << "\n";
-			//double p = 0;
+			// double p = 0;
         	double mult = 0;
 			if (params.task == 0) {
 				p = std::min(params.max_target, p);
@@ -191,25 +101,48 @@ void fm_model::learn(Data* train, Data* test, int num_iter) {
 			}
         	SGD(train->data[j], mult, m_sum);
 
+			// predict(train -> data[j], m_sum, m_sum_sqr, args);
         }
-        //double rmse_train = evaluate(train);
-		//std::cout << rmse_train << "\n";
+        double rmse_train = evaluate(train);
+		std::cout << rmse_train << "\n";
+
 		//std::cout << i << "\n";
         //double rmse_test = evaluate(test);
         //std::cout << "#Iter=" << std::setw(3) << i << "\tTrain=" << rmse_train << "\tTest=" << rmse_test << std::endl;
     }
+
 }
+
 
 __global__ void cudaSGD(sparse_row_v<DATA_FLOAT>* x, const double multiplier, double *sum, cudaArgs* args) {
 	int tid = threadIdx.x + blockDim.x * blockIdx.x;
 	if (tid == 0) {
 		*args->w0 -= args->params.learn_rate * (multiplier);
 	}
-	if (tid >= x->size)
+	if (tid >= x->size * args -> params.num_factor)
         return;
+
+	/*
 	for (uint i = 0; i < x->size; i++) {
 		args->w[i] -= args->params.learn_rate * (multiplier * x->data[i].value);
 	}
+	*/
+	int nf = args -> params.num_factor;
+
+	int f = int(tid / nf); // corresponds to f
+	int idx = tid - f * nf; // corresponds to i
+
+
+	if(f == 0) {
+		args->w[idx] -= args->params.learn_rate * (multiplier * x->data[idx].value);
+	}
+
+	double& v1 = args->v[f * args->params.num_attribute + x->data[idx].id];
+	double grad = sum[f] * x->data[idx].value - v1 * x->data[idx].value * x->data[idx].value;
+	v1 -= args->params.learn_rate * (multiplier * grad);
+
+
+	/**
 	for (int f = 0; f < args->params.num_factor; f++) {
 		for (uint i = 0; i < x->size; i++) {
 			double& v1 = args->v[f*args->params.num_attribute + x->data[i].id];
@@ -217,6 +150,7 @@ __global__ void cudaSGD(sparse_row_v<DATA_FLOAT>* x, const double multiplier, do
 			v1 -= args->params.learn_rate * (multiplier * grad);
 		}
 	}
+	*/
 }
 //done
 void fm_model::SGD(sparse_row_v<DATA_FLOAT>* x, const double multiplier, double *sum) {
@@ -236,33 +170,59 @@ void fm_model::SGD(sparse_row_v<DATA_FLOAT>* x, const double multiplier, double 
 	cudaSGD<<<1, NUM_THREADS>>>(x, multiplier, sum, cuda_args);
 }
 
+
+/*
+__device__ void cudaDotProd(double *v, sparse_entry<DATA_FLOAT> x, ) {
+	atomicAdd(, v[x.id] * x.value);
+}
+*/
+
+__global__ void cudaPredict(sparse_row_v<DATA_FLOAT>* x, double* sum, double* sum_sqr, cudaArgs* args) {
+	int tid = threadIdx.x + blockDim.x * blockIdx.x;
+	int nf = args -> params.num_factor;
+	if (tid >= x->size * nf) {
+		return;
+	}
+
+	//tid = face_value * num_factor + i where i < x.size 
+	int f = int(tid / nf); // corresponds to f
+	int idx = tid - f * nf; // corresponds to i
+
+	if (f == 0) {
+		atomicAdd(args->ret, args -> w[x->data[idx].id] * x->data[idx].value);
+	} // adds the linear terms 
+	
+	double val = args -> v[f *args->params.num_attribute + x->data[idx].id] * x->data[idx].value;
+
+	atomicAdd(&sum[f], val); // stores in sum[Faceval]
+	atomicAdd(&sum_sqr[f], val * val);
+}
+
+__global__ void aggregate(double * ret, double * sum, double * sum_sqr, cudaArgs * args) {
+	int tid = threadIdx.x + blockDim.x * blockIdx.x;
+	if (tid >= args -> params.num_factor) {
+		return;
+	}
+	//ret should be initialized to 0 first 
+	atomicAdd(ret, 0.5 * (sum[tid] * sum[tid] - sum_sqr[tid]));
+}
+
 double fm_model::predict(sparse_row_v<DATA_FLOAT>* x) {
 	return predict(x, m_sum, m_sum_sqr);
 }
 
 double fm_model::predict(sparse_row_v<DATA_FLOAT>* x, double* sum, double* sum_sqr) {
-	/*
-	double result = 0;
-	result += *w0;
-	for (uint i = 0; i < x->size; i++) {
-		assert(x.data[i].id < num_attribute);
-		result += w[x->data[i].id] * x->data[i].value;
-	}
-	for (int f = 0; f < params.num_factor; f++) {
-		sum[f] = 0;
-		sum_sqr[f] = 0;
-		for (uint i = 0; i < x->size; i++) {
-			double d = v[f*params.num_attribute + x->data[i].id] * x->data[i].value;
-			sum[f] += d;
-			sum_sqr[f] += d*d;
-		}
-		result += 0.5 * (sum[f]*sum[f] - sum_sqr[f]);
-	}
-	return result;
-	*/
 	double pred;
+	cudaMemcpy(ret, w0, sizeof(double), cudaMemcpyDeviceToDevice);
+
+	cudaMemset(sum, 0, sizeof(int) * params.num_factor);
+	cudaMemset(sum_sqr, 0, sizeof(int) * params.num_factor);
+
 	cudaPredict<<<1, NUM_THREADS>>>(x, sum, sum_sqr, cuda_args);
+	aggregate<<<1, NUM_THREADS>>>(ret, sum, sum_sqr, cuda_args);
+
 	cudaMemcpy(&pred, ret, sizeof(double), cudaMemcpyDeviceToHost);
+
 	return pred;
 }
 
