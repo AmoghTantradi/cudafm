@@ -45,6 +45,10 @@ int main(int argc, char** argv) {
 	std::chrono::duration<double> diff = end_time - start_time;
 	double seconds = diff.count();
 
+
+
+	// we need to parallelize test 
+
 	// Finalize
 	std::cout << "Simulation Time = " << seconds << " seconds \n";
 	/*

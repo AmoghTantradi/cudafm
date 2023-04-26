@@ -86,7 +86,7 @@ __global__ void cudaPredict(sparse_row_v<DATA_FLOAT>* x, double* sum, double* su
 	if (tid >= x->size)
         return;
 	for (uint i = 0; i < x->size; i++) {
-		pred += args->w[x->data[i].id] * x->data[i].value;
+		pred += args->w[x->data[i].id] * x->data[i].value;    // this can also be parallelized 
 	}
 	for (int f = 0; f < args->params.num_factor; f++) {
 		sum[f] = 0;
@@ -128,7 +128,7 @@ double fm_model::predict(sparse_entry<DATA_FLOAT>* x, int xsize, double* sum, do
 
 //done
 double fm_model::evaluate(Data* data) {
-  assert(data.data != NULL);
+  //assert(data->data != NULL);
   if (params.task == 0) {
     return evaluate_regression(data);
   } else if (params.task == 1) {
@@ -156,22 +156,22 @@ void fm_model::learn(Data* train, Data* test, int num_iter) {
     std::cout.flush();
     std::cout << "SGD: DON'T FORGET TO SHUFFLE THE ROWS IN TRAINING DATA TO GET THE BEST RESULTS." << std::endl;
 	// SGD
-	for (int i = 0; i < train->data.size(); i++) {
+	for (int i = 0; i < train->data.size(); i++) { // for each sparse row 
 		sparse_row_v<DATA_FLOAT>* sample;
-		int memsize = sizeof(sparse_row_v<DATA_FLOAT>) + train->data[i]->size*sizeof(sparse_entry<DATA_FLOAT>);
+		int memsize = sizeof(sparse_row_v<DATA_FLOAT>) + train->data[i]->size*sizeof(sparse_entry<DATA_FLOAT>); // total memorysize for a sparse row vector
 		cudaMalloc((void**)&sample, memsize);
 		cudaMemcpy(sample, train->data[i], memsize, cudaMemcpyHostToDevice);
 		//free(train->data[i]);
-		train->data[i] = sample;
+		train->data[i] = sample;  //move over training data to cuda 
 	}
 
-	cudaMalloc((void**)&cuda_args, sizeof(cudaArgs));
+	cudaMalloc((void**)&cuda_args, sizeof(cudaArgs)); 
 	cudaArgs args;
 	args.w0 = w0;
 	args.w = w;
 	args.v = v;
 	args.params = params;
-	cudaMalloc((void**)&ret, sizeof(double));
+	cudaMalloc((void**)&ret, sizeof(double)); // can't we just do cudaMalloc(args.ret, sizeof(double)) ? 
 	args.ret = ret;
 	cudaMemcpy(cuda_args, &args, sizeof(cudaArgs), cudaMemcpyHostToDevice);
 	
@@ -194,7 +194,7 @@ void fm_model::learn(Data* train, Data* test, int num_iter) {
         }
         //double rmse_train = evaluate(train);
 		//std::cout << rmse_train << "\n";
-		//std::cout << i << "\n";
+		std::cout << "iteration" << i << "\n";
         //double rmse_test = evaluate(test);
         //std::cout << "#Iter=" << std::setw(3) << i << "\tTrain=" << rmse_train << "\tTest=" << rmse_test << std::endl;
     }
@@ -207,15 +207,25 @@ __global__ void cudaSGD(sparse_row_v<DATA_FLOAT>* x, const double multiplier, do
 	}
 	if (tid >= x->size)
         return;
+
+	/*
 	for (uint i = 0; i < x->size; i++) {
-		args->w[i] -= args->params.learn_rate * (multiplier * x->data[i].value);
+		args->w[i] -= args->params.learn_rate * (multiplier * x->data[i].value); // can't this be done in parallel? 
 	}
+	*/
+	args -> w[tid] -= args -> params.learn_rate * (multiplier * x -> data[tid].value);
 	for (int f = 0; f < args->params.num_factor; f++) {
-		for (uint i = 0; i < x->size; i++) {
+		/*for (uint i = 0; i < x->size; i++) {
 			double& v1 = args->v[f*args->params.num_attribute + x->data[i].id];
 			double grad = sum[f] * x->data[i].value - v1 * x->data[i].value * x->data[i].value; 
 			v1 -= args->params.learn_rate * (multiplier * grad);
 		}
+		*/
+
+		// doubt there's a data race here. 
+		double& v1 = args->v[f*args->params.num_attribute + x->data[tid].id];
+		double grad = sum[f] * x->data[tid].value - v1 * x->data[tid].value * x->data[tid].value; 
+		v1 -= args->params.learn_rate * (multiplier * grad);
 	}
 }
 //done
