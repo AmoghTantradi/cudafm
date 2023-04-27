@@ -95,7 +95,7 @@ int main(int argc, char** argv) {
 				std::vector<int> dim(3);
                 dim[0] = 1;
                 dim[1] = 1;
-                dim[2] = 8;
+                dim[2] = 12;  // number of features 
 				assert(dim.size() == 3);
 				fm.k0 = dim[0] != 0;
 				fm.k1 = dim[1] != 0;

@@ -8,8 +8,17 @@
 
 bool LOG = false;
 
-//207.989 for omp
-//221.908
+//num_features = 4
+//102.967 for omp
+// for serial 
+
+//num_features = 8
+// 177.985  for omp 
+//221.908 for serial 
+
+//num_features = 12 
+//256.191 for omp 
+//        for serial 
 
 double fm_learn::predict_case(Data* data) {
   return fm->predict(data->data->getRow());
@@ -49,7 +58,7 @@ void fm_learn::learn(Data* train, Data* test) {
     std::cout.flush();
       std::cout << "SGD: DON'T FORGET TO SHUFFLE THE ROWS IN TRAINING DATA TO GET THE BEST RESULTS." << std::endl;
     // SGD
-    //#pragma omp parallel for 
+    #pragma omp parallel for 
     for (int i = 0; i < num_iter; i++) {
 
         for (train->data->begin(); !train->data->end(); train->data->next()) {
@@ -81,7 +90,7 @@ void fm_learn::SGD(sparse_row<DATA_FLOAT> *x, const double multiplier, DVector<d
 		w0 -= learn_rate * (multiplier + fm->reg0 * w0);
 	}
 	if (fm->k1) {
-    #pragma omp for 
+    #pragma omp parallel for 
 		for (uint i = 0; i < x->size; i++) {
 			double& w = fm->w(x->data[i].id);
 			w -= learn_rate * (multiplier * x->data[i].value + fm->regw * w);
