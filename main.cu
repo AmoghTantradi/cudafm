@@ -1,184 +1,273 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include "fm.h"
+#include <chrono>
+#include <cmath>
+#include <cstring>
+#include <cuda.h>
+#include <fstream>
 #include <iostream>
-#include <assert.h>
-
-#include "Utilities.cuh"
+#include <random>
+#include <vector>
+#include "./util/fmatrix.h"
+#include "data.h"
 
 #include <cuda_runtime.h>
-#include <cusparse_v2.h>
+#include <cusparse.h>
 
-/********/
-/* MAIN */
-/********/
-int main()
-{
-    // --- Initialize cuSPARSE
-    cusparseHandle_t handle;    cusparseSafeCall(cusparseCreate(&handle));
+// =================
+// Helper Functions
+// =================
 
-    /**************************/
-    /* SETTING UP THE PROBLEM */
-    /**************************/
-    const int N     = 4;                // --- Number of rows and columns
+// Command Line Option Processing
 
-    // --- Host side dense matrices
-    double *h_A_dense = (double*)malloc(N * N * sizeof(*h_A_dense));
-    double *h_B_dense = (double*)malloc(N * N * sizeof(*h_B_dense));
-    double *h_C_dense = (double*)malloc(N * N * sizeof(*h_C_dense));
+// ==============
+// Main Function
+// ==============
 
-    // --- Column-major ordering
-    h_A_dense[0] = 0.4612;  h_A_dense[4] = -0.0006;     h_A_dense[8]  = 0.3566;     h_A_dense[12] = 0.0; 
-    h_A_dense[1] = -0.0006; h_A_dense[5] = 0.4640;      h_A_dense[9]  = 0.0723;     h_A_dense[13] = 0.0; 
-    h_A_dense[2] = 0.3566;  h_A_dense[6] = 0.0723;      h_A_dense[10] = 0.7543;     h_A_dense[14] = 0.0; 
-    h_A_dense[3] = 0.;      h_A_dense[7] = 0.0;         h_A_dense[11] = 0.0;        h_A_dense[15] = 0.1; 
+int main(int argc, char** argv) {
+	// const std::string param_train_file	= "../data/ml-tag.test.libfm"; // "libfm_test.txt";
+	// // const std::string param_train_file	= "../scripts/libfm_test_data_large.txt"; // "libfm_test.txt";
+	// Data train;
+	// train.load(param_train_file);
+	// for (int i = 0; i < 10; i++) {
+	// 	std :: cout << train.target[i] << " ";
+	// 	for (int j = 0; j < train.data[i]->size; j++) {
+	// 		std::cout << train.data[i]->data[j].id << ":" << train.data[i]->data[j].value << " "; 
+	// 	}
+	// 	std::cout << std :: endl;
+	// }
+	// fm_model fm(train.num_feature, 8);
+	// fm.params.learn_rate = 0.05;
+	// fm.params.task = 1;
+	// fm.params.min_target = train.min_target;
+	// fm.params.max_target = train.max_target;
+	auto start_time = std::chrono::steady_clock::now();
+	// fm.learn(&train, &train, 2);
 
-    // --- Column-major ordering
-    h_B_dense[0] = 0.;      h_B_dense[4] = 0.;          h_B_dense[8]  = 1.;         h_B_dense[12] = 0.; 
-    h_B_dense[1] = 1.;      h_B_dense[5] = 0.;          h_B_dense[9]  = 0.;         h_B_dense[13] = 0.; 
-    h_B_dense[2] = 0.;      h_B_dense[6] = 1.;          h_B_dense[10] = 0.;         h_B_dense[14] = 0.; 
-    h_B_dense[3] = 0.;      h_B_dense[7] = 0.;          h_B_dense[11] = 0.;         h_B_dense[15] = 1.; 
+	cusparseHandle_t handle;
+	cusparseCreate(&handle);
 
-    // --- Create device arrays and copy host arrays to them
-    double *d_A_dense;  gpuErrchk(cudaMalloc(&d_A_dense, N * N * sizeof(*d_A_dense)));
-    double *d_B_dense;  gpuErrchk(cudaMalloc(&d_B_dense, N * N * sizeof(*d_B_dense)));
-    double *d_C_dense;  gpuErrchk(cudaMalloc(&d_C_dense, N * N * sizeof(*d_C_dense)));
-    gpuErrchk(cudaMemcpy(d_A_dense, h_A_dense, N * N * sizeof(*d_A_dense), cudaMemcpyHostToDevice));
-    gpuErrchk(cudaMemcpy(d_B_dense, h_B_dense, N * N * sizeof(*d_B_dense), cudaMemcpyHostToDevice));
+	// [[1 0 2]
+	// [0 3 0]
+	// [4 0 5]]
 
-    // --- Descriptor for sparse matrix A
-    cusparseMatDescr_t descrA;      cusparseSafeCall(cusparseCreateMatDescr(&descrA));
-    cusparseSafeCall(cusparseSetMatType     (descrA, CUSPARSE_MATRIX_TYPE_GENERAL));
-    cusparseSafeCall(cusparseSetMatIndexBase(descrA, CUSPARSE_INDEX_BASE_ONE));  
+	int values[5] = {1, 2, 3, 4, 5};
+	int colIdx[5] = {0, 2, 1, 0, 2};
+	int rowPtr[4] = {0, 2, 3, 5};
 
-    // --- Descriptor for sparse matrix B
-    cusparseMatDescr_t descrB;      cusparseSafeCall(cusparseCreateMatDescr(&descrB));
-    cusparseSafeCall(cusparseSetMatType     (descrB, CUSPARSE_MATRIX_TYPE_GENERAL));
-    cusparseSafeCall(cusparseSetMatIndexBase(descrB, CUSPARSE_INDEX_BASE_ONE));  
+	 cusparseSpMatDescr_t descrA;
+	 cusparseCreateCsr(&descrA, 3,3,5, rowPtr, colIdx, values, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F);
+	//  cusparseSetMatType(descrA, CUSPARSE_MATRIX_TYPE_GENERAL);
+	//  cusparseSetMatIndexBase(descrA, CUSPARSE_INDEX_BASE_ZERO);
 
-    // --- Descriptor for sparse matrix C
-    cusparseMatDescr_t descrC;      cusparseSafeCall(cusparseCreateMatDescr(&descrC));
-    cusparseSafeCall(cusparseSetMatType     (descrC, CUSPARSE_MATRIX_TYPE_GENERAL));
-    cusparseSafeCall(cusparseSetMatIndexBase(descrC, CUSPARSE_INDEX_BASE_ONE));  
+	 cusparseDnMatDescr_t descrB;
+	 cusparseCreateDnMat(&descrB,
+	 				3, 3, 3,
+					values,
+					CUDA_R_64F,
+					CUSPARSE_ORDER_ROW
+	 );
 
-    int nnzA = 0;                           // --- Number of nonzero elements in dense matrix A
-    int nnzB = 0;                           // --- Number of nonzero elements in dense matrix B
+	//  cusparseSetMatType(descrB, CUSPARSE_MATRIX_TYPE_GENERAL);
+	//  cusparseSetMatIndexBase(descrB, CUSPARSE_INDEX_BASE_ZERO);
 
-    const int lda = N;                      // --- Leading dimension of dense matrix
+	 int *d_values;
+	 int *d_colIdx;
+	 int *d_rowPtr;
 
-    // --- Device side number of nonzero elements per row of matrix A
-    int *d_nnzPerVectorA;   gpuErrchk(cudaMalloc(&d_nnzPerVectorA, N * sizeof(*d_nnzPerVectorA)));
-    cusparseSafeCall(cusparseDnnz(handle, CUSPARSE_DIRECTION_ROW, N, N, descrA, d_A_dense, lda, d_nnzPerVectorA, &nnzA));
+	 cudaMalloc((void **)&d_values, 5 * sizeof(int));
+	 cudaMalloc((void **)&d_colIdx, 5 * sizeof(int));
+	 cudaMalloc((void **)&d_rowPtr, 4 * sizeof(int));
 
-    // --- Device side number of nonzero elements per row of matrix B
-    int *d_nnzPerVectorB;   gpuErrchk(cudaMalloc(&d_nnzPerVectorB, N * sizeof(*d_nnzPerVectorB)));
-    cusparseSafeCall(cusparseDnnz(handle, CUSPARSE_DIRECTION_ROW, N, N, descrB, d_B_dense, lda, d_nnzPerVectorB, &nnzB));
+	 cudaMemcpy(d_values, values, 5 * sizeof(int), cudaMemcpyHostToDevice);
+	 cudaMemcpy(d_colIdx, colIdx, 5 * sizeof(int), cudaMemcpyHostToDevice);
+	 cudaMemcpy(d_rowPtr, rowPtr, 4 * sizeof(int), cudaMemcpyHostToDevice);
 
-    // --- Host side number of nonzero elements per row of matrix A
-    int *h_nnzPerVectorA = (int *)malloc(N * sizeof(*h_nnzPerVectorA));
-    gpuErrchk(cudaMemcpy(h_nnzPerVectorA, d_nnzPerVectorA, N * sizeof(*h_nnzPerVectorA), cudaMemcpyDeviceToHost));
+	 cusparseDnMatDescr_t descrC;
+	 cusparseCreateDnMat(&descrC,
+	 				3, 3, 3,
+					values,
+					CUDA_R_64F,
+					CUSPARSE_ORDER_ROW
+	 );
+	//  cusparseSetMatType(descrC, CUSPARSE_MATRIX_TYPE_GENERAL);
+	//  cusparseSetMatIndexBase(descrC, CUSPARSE_INDEX_BASE_ZERO);
+	 int *d_C;
+	 cudaMalloc((void **)&d_C, 9 * sizeof(int));
 
-    // --- Host side number of nonzero elements per row of matrix B
-    int *h_nnzPerVectorB = (int *)malloc(N * sizeof(*h_nnzPerVectorB));
-    gpuErrchk(cudaMemcpy(h_nnzPerVectorB, d_nnzPerVectorB, N * sizeof(*h_nnzPerVectorB), cudaMemcpyDeviceToHost));
+	 int nnzC = 0;
+	 int *nnzTotalDevHostPtr = &nnzC;
 
-    printf("Number of nonzero elements in dense matrix A = %i\n\n", nnzA);
-    for (int i = 0; i < N; ++i) printf("Number of nonzero elements in row %i for matrix = %i \n", i, h_nnzPerVectorA[i]);
-    printf("\n");
+	const float alpha = 1.0;
+	const float beta = 0.0;
+	cusparseSpMMAlg_t alg = CUSPARSE_MM_ALG_DEFAULT;
+	cusparseSpMM(handle, 
+		CUSPARSE_OPERATION_NON_TRANSPOSE, 
+		CUSPARSE_OPERATION_NON_TRANSPOSE, 
+        &alpha, 
+		descrA, 
+		descrB, 
+		&beta, 
+		descrC,
+		CUDA_R_64F,
+			//  3, 3, 5,
+        alg, 
+		d_C);
 
-    printf("Number of nonzero elements in dense matrix B = %i\n\n", nnzB);
-    for (int i = 0; i < N; ++i) printf("Number of nonzero elements in row %i for matrix = %i \n", i, h_nnzPerVectorB[i]);
-    printf("\n");
+	int *h_C = (int *)malloc(9 * sizeof(int));
+	cudaMemcpy(&h_C, d_C, 9*sizeof(int), cudaMemcpyDeviceToHost);
 
-    // --- Device side sparse matrix
-    double *d_A;            gpuErrchk(cudaMalloc(&d_A, nnzA * sizeof(*d_A)));
-    double *d_B;            gpuErrchk(cudaMalloc(&d_B, nnzB * sizeof(*d_B)));
+	for (int i = 0; i < 9; i++) {
+		std::cout << h_C[i] << " ";
+	}
 
-    int *d_A_RowIndices;    gpuErrchk(cudaMalloc(&d_A_RowIndices, (N + 1) * sizeof(*d_A_RowIndices)));
-    int *d_B_RowIndices;    gpuErrchk(cudaMalloc(&d_B_RowIndices, (N + 1) * sizeof(*d_B_RowIndices)));
-    int *d_C_RowIndices;    gpuErrchk(cudaMalloc(&d_C_RowIndices, (N + 1) * sizeof(*d_C_RowIndices)));
-    int *d_A_ColIndices;    gpuErrchk(cudaMalloc(&d_A_ColIndices, nnzA * sizeof(*d_A_ColIndices)));
-    int *d_B_ColIndices;    gpuErrchk(cudaMalloc(&d_B_ColIndices, nnzB * sizeof(*d_B_ColIndices)));
+	// cleanup:
+	free(h_C);
+	cudaFree(d_values);
+	cudaFree(d_colIdx);
+	cudaFree(d_rowPtr);
+	cudaFree(d_C);
+	cusparseDestroySpMat(descrA);
+	cusparseDestroyDnMat(descrB);
+	cusparseDestroyDnMat(descrC);
+	cusparseDestroy(handle);
 
-    cusparseSafeCall(cusparseDdense2csr(handle, N, N, descrA, d_A_dense, lda, d_nnzPerVectorA, d_A, d_A_RowIndices, d_A_ColIndices));
-    cusparseSafeCall(cusparseDdense2csr(handle, N, N, descrB, d_B_dense, lda, d_nnzPerVectorB, d_B, d_B_RowIndices, d_B_ColIndices));
+	auto end_time = std::chrono::steady_clock::now();
+	std::chrono::duration<double> diff = end_time - start_time;
+	double seconds = diff.count();
+	// Finalize
+	std::cout << "Simulation Time = " << seconds << " seconds \n";
+	/*
+    srand ( time(NULL) );
+	try {
+		
+		const std::string param_task		= "c";
+		const std::string param_train_file	= "libfm_test.txt";
+		const std::string param_test_file	= "libfm_test.txt";
 
-    // --- Host side sparse matrices
-    double *h_A = (double *)malloc(nnzA * sizeof(*h_A));        
-    double *h_B = (double *)malloc(nnzB * sizeof(*h_B));        
-    int *h_A_RowIndices = (int *)malloc((N + 1) * sizeof(*h_A_RowIndices));
-    int *h_A_ColIndices = (int *)malloc(nnzA * sizeof(*h_A_ColIndices));
-    int *h_B_RowIndices = (int *)malloc((N + 1) * sizeof(*h_B_RowIndices));
-    int *h_B_ColIndices = (int *)malloc(nnzB * sizeof(*h_B_ColIndices));
-    int *h_C_RowIndices = (int *)malloc((N + 1) * sizeof(*h_C_RowIndices));
-    gpuErrchk(cudaMemcpy(h_A, d_A, nnzA * sizeof(*h_A), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(h_A_RowIndices, d_A_RowIndices, (N + 1) * sizeof(*h_A_RowIndices), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(h_A_ColIndices, d_A_ColIndices, nnzA * sizeof(*h_A_ColIndices), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(h_B, d_B, nnzB * sizeof(*h_B), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(h_B_RowIndices, d_B_RowIndices, (N + 1) * sizeof(*h_B_RowIndices), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(h_B_ColIndices, d_B_ColIndices, nnzB * sizeof(*h_B_ColIndices), cudaMemcpyDeviceToHost));
+		double param_init_stdev	= 0.1;
+		int param_num_iter	= 100;
+		double param_learn_rate	= 0.01;
+		const std::string param_method		= "sgd";
 
-    printf("\nOriginal matrix A in CSR format\n\n");
-    for (int i = 0; i < nnzA; ++i) printf("A[%i] = %f ", i, h_A[i]); printf("\n");
+		const std::string param_do_sampling	= "do_sampling";
+		const std::string param_do_multilevel	= "do_multilevel";
+		const std::string param_num_eval_cases  = "num_eval_cases";
+		// (1) Load the data
+		std::cout << "Loading train...\t" << std::endl;
+		Data train(
+			0,
+			! (!param_method.compare("mcmc")), // no original data for mcmc
+			! (!param_method.compare("sgd") || !param_method.compare("sgda")) // no transpose data for sgd, sgda
+		);
+		train.load(param_train_file);
 
-    printf("\nOriginal matrix B in CSR format\n\n");
-    for (int i = 0; i < nnzB; ++i) printf("B[%i] = %f ", i, h_B[i]); printf("\n");
+		std::cout << "Loading test... \t" << std::endl;
+		Data test(
+			0,
+			! (!param_method.compare("mcmc")), // no original data for mcmc
+			! (!param_method.compare("sgd") || !param_method.compare("sgda")) // no transpose data for sgd, sgda
+		);
+		test.load(param_test_file);
 
-    printf("\n");
-    for (int i = 0; i < (N + 1); ++i) printf("h_A_RowIndices[%i] = %i \n", i, h_A_RowIndices[i]); printf("\n");
+		Data* validation = NULL;
 
-    printf("\n");
-    for (int i = 0; i < (N + 1); ++i) printf("h_B_RowIndices[%i] = %i \n", i, h_B_RowIndices[i]); printf("\n");
+		// (2) Setup the factorization machine
+		fm_model fm;
+		{
+            uint num_all_attribute = std::max(train.num_feature, test.num_feature);
+			fm.num_attribute = num_all_attribute;
+			fm.init_stdev = param_init_stdev;
+			// set the number of dimensions in the factorization
+			{ 
+				std::vector<int> dim(3);
+                dim[0] = 1;
+                dim[1] = 1;
+                dim[2] = 8;
+				assert(dim.size() == 3);
+				fm.k0 = dim[0] != 0;
+				fm.k1 = dim[1] != 0;
+				fm.num_factor = dim[2];					
+			}			
+			fm.init();		
+			
+		}
 
-    printf("\n");
-    for (int i = 0; i < nnzA; ++i) printf("h_A_ColIndices[%i] = %i \n", i, h_A_ColIndices[i]);  
-
-    printf("\n");
-    for (int i = 0; i < nnzB; ++i) printf("h_B_ColIndices[%i] = %i \n", i, h_B_ColIndices[i]);  
-
-    // --- Performing the matrix - matrix multiplication
-    int baseC, nnzC = 0;
-    // nnzTotalDevHostPtr points to host memory
-    int *nnzTotalDevHostPtr = &nnzC;    
-
-    cusparseSafeCall(cusparseSetPointerMode(handle, CUSPARSE_POINTER_MODE_HOST));
-
-    // cusparseSafeCall(cusparseXcsrgemmNnz(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE, N, N, N, descrB, nnzB, 
-    //                                      d_B_RowIndices, d_B_ColIndices, descrA, nnzA, d_A_RowIndices, d_A_ColIndices, descrC, d_C_RowIndices, 
-    //                                      nnzTotalDevHostPtr));
-    if (NULL != nnzTotalDevHostPtr) nnzC = *nnzTotalDevHostPtr;
-    else {
-        gpuErrchk(cudaMemcpy(&nnzC,  d_C_RowIndices + N, sizeof(int), cudaMemcpyDeviceToHost));
-        gpuErrchk(cudaMemcpy(&baseC, d_C_RowIndices,     sizeof(int), cudaMemcpyDeviceToHost));
-        nnzC -= baseC;
-    }
-    int *d_C_ColIndices;    gpuErrchk(cudaMalloc(&d_C_ColIndices, nnzC * sizeof(int)));
-    double *d_C;            gpuErrchk(cudaMalloc(&d_C, nnzC * sizeof(double)));
-    double *h_C = (double *)malloc(nnzC * sizeof(*h_C));        
-    int *h_C_ColIndices = (int *)malloc(nnzC * sizeof(*h_C_ColIndices));
-    // cusparseSafeCall(cusparseDcsrgemm(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE, N, N, N, descrB, nnzB,
-    //                                   d_B, d_B_RowIndices, d_B_ColIndices, descrA, nnzA, d_A, d_A_RowIndices, d_A_ColIndices, descrC,
-    //                                   d_C, d_C_RowIndices, d_C_ColIndices));
-
-    cusparseSafeCall(cusparseDcsr2dense(handle, N, N, descrC, d_C, d_C_RowIndices, d_C_ColIndices, d_C_dense, N));
-
-    gpuErrchk(cudaMemcpy(h_C ,           d_C,            nnzC * sizeof(*h_C), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(h_C_RowIndices, d_C_RowIndices, (N + 1) * sizeof(*h_C_RowIndices), cudaMemcpyDeviceToHost));
-    gpuErrchk(cudaMemcpy(h_C_ColIndices, d_C_ColIndices, nnzC * sizeof(*h_C_ColIndices), cudaMemcpyDeviceToHost));
-
-    printf("\nResult matrix C in CSR format\n\n");
-    for (int i = 0; i < nnzC; ++i) printf("C[%i] = %f ", i, h_C[i]); printf("\n");
-
-    printf("\n");
-    for (int i = 0; i < (N + 1); ++i) printf("h_C_RowIndices[%i] = %i \n", i, h_C_RowIndices[i]); printf("\n");
-
-    printf("\n");
-    for (int i = 0; i < nnzC; ++i) printf("h_C_ColIndices[%i] = %i \n", i, h_C_ColIndices[i]);  
-
-    gpuErrchk(cudaMemcpy(h_C_dense, d_C_dense, N * N * sizeof(double), cudaMemcpyDeviceToHost));
-
-    for (int j = 0; j < N; j++) {
-        for (int i = 0; i < N; i++) 
-            printf("%f \t", h_C_dense[i * N + j]);
-        printf("\n");
+		// (3) Setup the learning method:
+		fm_learn* fml;
+		if (! param_method.compare("sgd")) {
+	 		fml = new fm_learn();
+			fml->num_iter = param_num_iter;
+		} else {
+			throw "unknown method";
+		}
+		fml->fm = &fm;
+		fml->max_target = train.max_target;
+		fml->min_target = train.min_target;
+		if (! param_task.compare("r") ) {
+			fml->task = 0;
+		} else if (! param_task.compare("c") ) {
+			fml->task = 1;
+			for (uint i = 0; i < train.target.dim; i++) { if (train.target(i) <= 0.0) { train.target(i) = -1.0; } else {train.target(i) = 1.0; } }
+			for (uint i = 0; i < test.target.dim; i++) { if (test.target(i) <= 0.0) { test.target(i) = -1.0; } else {test.target(i) = 1.0; } }
+		} else {
+			throw "unknown task";
+		}
+		
+        fml->init();
+        // set the regularization; for standard SGD, groups are not supported
+        { 
+            std::vector<double> reg(3);
+            reg[2] == 0.01;
+            assert((reg.size() == 0) || (reg.size() == 1) || (reg.size() == 3));
+            if (reg.size() == 0) {
+                fm.reg0 = 0.0;
+                fm.regw = 0.0;
+                fm.regv = 0.0;
+            } else if (reg.size() == 1) {
+                fm.reg0 = reg[0];
+                fm.regw = reg[0];
+                fm.regv = reg[0];
+            } else {
+                fm.reg0 = reg[0];
+                fm.regw = reg[1];
+                fm.regv = reg[2];
+            }		
         }
+		{
+			std::vector<double> lr(1, param_learn_rate);
+			assert((lr.size() == 1) || (lr.size() == 3));
+			if (lr.size() == 1) {
+				fml->learn_rate = lr[0];
+				fml->learn_rates.init(lr[0]);
+			} else {
+				fml->learn_rate = 0;
+				fml->learn_rates(0) = lr[0];
+				fml->learn_rates(1) = lr[1];
+				fml->learn_rates(2) = lr[2];
+			}
+		}
+
+		auto start_time = std::chrono::steady_clock::now();
+
+		// () learn		
+		fml->learn(&train, &test);
+
+		// () Prediction at the end  (not for mcmc and als)
+		std::cout << "Final\t" << "Train=" << fml->evaluate(&train) << "\tTest=" << fml->evaluate(&test) << std::endl;
+
+		auto end_time = std::chrono::steady_clock::now();
+		std::chrono::duration<double> diff = end_time - start_time;
+		double seconds = diff.count();
+
+		// Finalize
+		std::cout << "Simulation Time = " << seconds << " seconds \n";
+				 	
+
+	} catch (std::string &e) {
+		std::cerr << std::endl << "ERROR: " << e << std::endl;
+	} catch (char const* &e) {
+		std::cerr << std::endl << "ERROR: " << e << std::endl;
+	}
+	*/
+
 }
