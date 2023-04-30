@@ -14,7 +14,7 @@ if (NOT "${CMAKE_C_COMPILER_ID}" STREQUAL "GNU")
 endif ()
 
 
-add_executable(gpu main.cu fm.h fm.cu data.h data.cpp util/fmatrix.h util/random.h util/random.cpp)
+add_executable(gpu Utilities.cuh main.cu fm.h fm.cu data.h data.cpp util/fmatrix.h util/random.h util/random.cpp)
 target_compile_features(gpu PRIVATE cxx_std_14)
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -arch=sm_80")
 set_target_properties(gpu PROPERTIES CUDA_ARCHITECTURES "80")
