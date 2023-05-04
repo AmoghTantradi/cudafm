@@ -65,6 +65,13 @@ __global__ void aggregate(double * ret, double * sum, double * sum_sqr, cudaArgs
 }
 
 double fm_model::predict(sparse_row_v<DATA_FLOAT>* x, double* sum, double* sum_sqr) {
+
+	// want to batch x 
+	//also want to make sure our x doesn't have any overlap in our features 
+
+	//could we use something like union_find? if find(xj) is null, then we know there's no intersection with our set of sparse rows. 
+	
+
     double pred;
     cudaMemcpy(ret, w0, sizeof(double), cudaMemcpyDeviceToDevice);
 
@@ -211,7 +218,7 @@ double fm_model::evaluate_regression(Data* data) {
 }
 
 double fm_model::evaluate(Data* data) {
-  assert(data.data != NULL);
+  //assert(data->data != NULL);
   if (params.task == 0) {
     return evaluate_regression(data);
   } else if (params.task == 1) {
