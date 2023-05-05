@@ -42,82 +42,169 @@ int main(int argc, char** argv) {
     auto start_time = std::chrono::steady_clock::now();
     // fm.learn(&train, &train, 2);
 
-    cusparseHandle_t handle;
-    cusparseCreate(&handle);
-
     // [[1 0 2]
     // [0 3 0]
     // [4 0 5]]
 
-    // double values[5] = {1, 2, 3, 4, 5};
-    // int colIdx[5] = {0, 2, 1, 0, 2};
-    // int rowPtr[4] = {0, 2, 3, 5};
-    
-	// cusparseSpMatDescr_t descrA;
-    // cusparseCreateCsr(&descrA, 3, 3, 5, rowPtr, colIdx, values, CUSPARSE_INDEX_32I,
-    //                   CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F);
+    cusparseHandle_t handle;
+    cusparseCreate(&handle);
 
-	double values2[9] = {1, 1, 1,
-                         1, 1, 1,
-                         1, 1, 1};
+    double values[5] = {1, 2, 3, 4, 5};
+    int colIdx[5] = {0, 2, 1, 0, 2};
+    int rowPtr[4] = {0, 2, 3, 5};
+
+    double* d_A_values;
+    cudaMalloc((void**)&d_A_values, 5 * sizeof(double));
+    cudaMemcpy(d_A_values, values, 5 * sizeof(double), cudaMemcpyHostToDevice);
+
+    cusparseSpMatDescr_t descrA;
+    cusparseCreateCsr(&descrA, 3, 3, 5, rowPtr, colIdx, d_A_values, CUSPARSE_INDEX_32I,
+                      CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F);
+
+    double* a_C = (double*)malloc(5 * sizeof(double));
+
+    cudaMemcpy(a_C, d_A_values, 5 * sizeof(double), cudaMemcpyDeviceToHost);
+
+    double values2[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
 
     cusparseDnMatDescr_t descrB;
-	double* d_B_values;
+
+    double* d_B_values;
     cudaMalloc((void**)&d_B_values, 9 * sizeof(double));
     cudaMemcpy(d_B_values, values2, 9 * sizeof(double), cudaMemcpyHostToDevice);
 
     cusparseCreateDnMat(&descrB, 3, 3, 3, d_B_values, CUDA_R_64F, CUSPARSE_ORDER_ROW);
 
-    double *b_C = (double *) malloc(9 * sizeof(double));
+    double* b_C = (double*)malloc(9 * sizeof(double));
 
     cudaMemcpy(b_C, d_B_values, 9 * sizeof(double), cudaMemcpyDeviceToHost);
 
-    std::cout << "B value" << std::endl;
+    double* d_values;
+    int* d_colIdx;
+    int* d_rowPtr;
 
-    for (int i = 0; i < 9; i++) {
-        std::cout << b_C[i] <<  " ";
-    }
+    cudaMalloc((void**)&d_values, 5 * sizeof(double));
+    cudaMalloc((void**)&d_colIdx, 5 * sizeof(int));
+    cudaMalloc((void**)&d_rowPtr, 4 * sizeof(int));
 
-    // double* d_values;
-    // int* d_colIdx;
-    // int* d_rowPtr;
+    cudaMemcpy(d_values, values, 5 * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_colIdx, colIdx, 5 * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_rowPtr, rowPtr, 4 * sizeof(int), cudaMemcpyHostToDevice);
 
-    // cudaMalloc((void**)&d_values, 5 * sizeof(double));
-    // cudaMalloc((void**)&d_colIdx, 5 * sizeof(int));
-    // cudaMalloc((void**)&d_rowPtr, 4 * sizeof(int));
 
-    // cudaMemcpy(d_values, values, 5 * sizeof(double), cudaMemcpyHostToDevice);
-    // cudaMemcpy(d_colIdx, colIdx, 5 * sizeof(int), cudaMemcpyHostToDevice);
-    // cudaMemcpy(d_rowPtr, rowPtr, 4 * sizeof(int), cudaMemcpyHostToDevice);
-
-    // cusparseDnMatDescr_t descrC;
-    // cusparseCreateDnMat(&descrC, 3, 3, 3, values, CUDA_R_64F, CUSPARSE_ORDER_ROW);
     // double* d_C;
     // cudaMalloc((void**)&d_C, 9 * sizeof(double));
+
+    // size_t buffer_size;
 
     // int nnzC = 0;
     // int* nnzTotalDevHostPtr = &nnzC;
 
     // const float alpha = 1.0;
     // const float beta = 0.0;
-    // cusparseSpMMAlg_t alg = CUSPARSE_MM_ALG_DEFAULT;
-    // cusparseSpMM(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha,
-    //              descrA, descrB, &beta, descrC, CUDA_R_64F, alg, d_C);
+    /*
+    cusparseSpMMAlg_t alg = CUSPARSE_MM_ALG_DEFAULT;
+
+    cusparseDnMatDescr_t descrC;
+
+    double valuesC[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+
+    double* d_C_values;
+    cudaMalloc((void**)&d_C_values, 9 * sizeof(double));
+    cudaMemcpy(d_C_values, valuesC, 9 * sizeof(double), cudaMemcpyHostToDevice);
+
+    cusparseCreateDnMat(&descrC, 3, 3, 3, d_C_values, CUDA_R_64F, CUSPARSE_ORDER_ROW);
+    cusparseSpMM_bufferSize(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                            CUSPARSE_OPERATION_NON_TRANSPOSE, (void*)&alpha, descrA, descrB,
+                            (void*)&beta, descrC, CUDA_R_64F, alg, &buffer_size);
+
+    cudaDeviceSynchronize();
+
+    void* buffer = 0;
+    cudaMalloc(&buffer, buffer_size);
+
+    cusparseSpMM(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
+                 (void*)&alpha, descrA, descrB, (void*)&beta, descrC, CUDA_R_64F, alg, buffer);
+   */
+   
+   
+   
+    // double valuesC[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+  
+   
+    // cusparseDnMatDescr_t descrC;
+
+
+    
+
+
 
     // double* h_C = (double*)malloc(9 * sizeof(double));
-    // cudaMemcpy(h_C, d_C, 9 * sizeof(double), cudaMemcpyDeviceToHost);
+    // cudaMemcpy(h_C, &descrC, 9 * sizeof(double), cudaMemcpyDeviceToHost);
+
+
 
     // std::cout << "Result: " << std::endl;
     // for (int i = 0; i < 9; i++) {
     //     std::cout << h_C[i] << " ";
     // }
 
-    // cleanup:
+// works somewhat
+	cusparseDnMatDescr_t descrC;
+
+	double valuesC[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+
+	double* d_C_values;
+	cudaMalloc((void**)&d_C_values, 9 * sizeof(double));
+	cudaMemcpy(d_C_values, valuesC, 9 * sizeof(double), cudaMemcpyHostToDevice);
+
+	cusparseCreateDnMat(&descrC, 3, 3, 3, d_C_values, CUDA_R_64F, CUSPARSE_ORDER_ROW);
+
+	std::cout << "Result: " << std::endl;
+
+
+       double* valuesdv;
+       int64_t rows;
+       int64_t cols;
+       int64_t ld;
+       cudaDataType cuda_data_type;
+       cusparseOrder_t order;
+
+
+        cusparseDnMatGet(
+                descrC,
+                &rows, 
+                &cols, 
+                &ld, 
+                (void **) &valuesdv,
+                &cuda_data_type,
+                &order			                
+        );
+
+
+
+
+
+	double* h_C = new double[9];
+        
+
+
+	cudaMemcpy(h_C, valuesdv, 9 * sizeof(double), cudaMemcpyDeviceToHost);
+
+	for (int i = 0; i < 9; i++) {
+		std::cout << h_C[i] << " ";
+	}
+	delete[] h_C;
+	cudaFree(d_C_values);
+
+
+
+
     // free(h_C);
     // cudaFree(d_values);
     // cudaFree(d_colIdx);
     // cudaFree(d_rowPtr);
-    // cudaFree(d_C);
+    // // cudaFree(d_C);
     // cusparseDestroySpMat(descrA);
     // cusparseDestroyDnMat(descrB);
     // cusparseDestroyDnMat(descrC);
