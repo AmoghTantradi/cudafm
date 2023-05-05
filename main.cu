@@ -49,73 +49,79 @@ int main(int argc, char** argv) {
     // [0 3 0]
     // [4 0 5]]
 
-    double values[5] = {1, 2, 3, 4, 5};
-    int colIdx[5] = {0, 2, 1, 0, 2};
-    int rowPtr[4] = {0, 2, 3, 5};
+    // double values[5] = {1, 2, 3, 4, 5};
+    // int colIdx[5] = {0, 2, 1, 0, 2};
+    // int rowPtr[4] = {0, 2, 3, 5};
+    
+	// cusparseSpMatDescr_t descrA;
+    // cusparseCreateCsr(&descrA, 3, 3, 5, rowPtr, colIdx, values, CUSPARSE_INDEX_32I,
+    //                   CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F);
 
-    cusparseSpMatDescr_t descrA;
-    cusparseCreateCsr(&descrA, 3, 3, 5, rowPtr, colIdx, values, CUSPARSE_INDEX_32I,
-                      CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F);
+	double values2[9] = {1, 1, 1,
+                         1, 1, 1,
+                         1, 1, 1};
 
     cusparseDnMatDescr_t descrB;
-    cusparseCreateDnMat(&descrB, 3, 3, 3, values, CUDA_R_64F, CUSPARSE_ORDER_ROW);
-	
-	double *b_C = (double *) malloc(9 * sizeof(double));
+	double* d_B_values;
+    cudaMalloc((void**)&d_B_values, 9 * sizeof(double));
+    cudaMemcpy(d_B_values, values2, 9 * sizeof(double), cudaMemcpyHostToDevice);
 
-	cudaMemcpy(&b_C, descrB, 9 * sizeof(double), cudaMemcpyDeviceToHost);
+    cusparseCreateDnMat(&descrB, 3, 3, 3, d_B_values, CUDA_R_64F, CUSPARSE_ORDER_ROW);
 
-	std::cout << "B value" << std::endl;
+    double *b_C = (double *) malloc(9 * sizeof(double));
 
-	for (int i = 0; i < 9; i++) {
-		std::cout << b_C[i] <<  " " ;
-	}
+    cudaMemcpy(b_C, d_B_values, 9 * sizeof(double), cudaMemcpyDeviceToHost);
 
+    std::cout << "B value" << std::endl;
 
-
-    double* d_values;
-    int* d_colIdx;
-    int* d_rowPtr;
-
-    cudaMalloc((void**)&d_values, 5 * sizeof(double));
-    cudaMalloc((void**)&d_colIdx, 5 * sizeof(int));
-    cudaMalloc((void**)&d_rowPtr, 4 * sizeof(int));
-
-    cudaMemcpy(d_values, values, 5 * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_colIdx, colIdx, 5 * sizeof(int), cudaMemcpyHostToDevice);
-    cudaMemcpy(d_rowPtr, rowPtr, 4 * sizeof(int), cudaMemcpyHostToDevice);
-
-    cusparseDnMatDescr_t descrC;
-    cusparseCreateDnMat(&descrC, 3, 3, 3, values, CUDA_R_64F, CUSPARSE_ORDER_ROW);
-    double* d_C;
-    cudaMalloc((void**)&d_C, 9 * sizeof(double));
-
-    int nnzC = 0;
-    int* nnzTotalDevHostPtr = &nnzC;
-
-    const float alpha = 1.0;
-    const float beta = 0.0;
-    cusparseSpMMAlg_t alg = CUSPARSE_MM_ALG_DEFAULT;
-    cusparseSpMM(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha,
-                 descrA, descrB, &beta, descrC, CUDA_R_64F, alg, d_C);
-
-    double* h_C = (double*)malloc(9 * sizeof(double));
-    cudaMemcpy(&h_C, d_C, 9 * sizeof(double), cudaMemcpyDeviceToHost);
-
-    std::cout << "Result: " << std::endl;
     for (int i = 0; i < 9; i++) {
-        std::cout << h_C[i] << " ";
+        std::cout << b_C[i] <<  " ";
     }
 
+    // double* d_values;
+    // int* d_colIdx;
+    // int* d_rowPtr;
+
+    // cudaMalloc((void**)&d_values, 5 * sizeof(double));
+    // cudaMalloc((void**)&d_colIdx, 5 * sizeof(int));
+    // cudaMalloc((void**)&d_rowPtr, 4 * sizeof(int));
+
+    // cudaMemcpy(d_values, values, 5 * sizeof(double), cudaMemcpyHostToDevice);
+    // cudaMemcpy(d_colIdx, colIdx, 5 * sizeof(int), cudaMemcpyHostToDevice);
+    // cudaMemcpy(d_rowPtr, rowPtr, 4 * sizeof(int), cudaMemcpyHostToDevice);
+
+    // cusparseDnMatDescr_t descrC;
+    // cusparseCreateDnMat(&descrC, 3, 3, 3, values, CUDA_R_64F, CUSPARSE_ORDER_ROW);
+    // double* d_C;
+    // cudaMalloc((void**)&d_C, 9 * sizeof(double));
+
+    // int nnzC = 0;
+    // int* nnzTotalDevHostPtr = &nnzC;
+
+    // const float alpha = 1.0;
+    // const float beta = 0.0;
+    // cusparseSpMMAlg_t alg = CUSPARSE_MM_ALG_DEFAULT;
+    // cusparseSpMM(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE, &alpha,
+    //              descrA, descrB, &beta, descrC, CUDA_R_64F, alg, d_C);
+
+    // double* h_C = (double*)malloc(9 * sizeof(double));
+    // cudaMemcpy(h_C, d_C, 9 * sizeof(double), cudaMemcpyDeviceToHost);
+
+    // std::cout << "Result: " << std::endl;
+    // for (int i = 0; i < 9; i++) {
+    //     std::cout << h_C[i] << " ";
+    // }
+
     // cleanup:
-    free(h_C);
-    cudaFree(d_values);
-    cudaFree(d_colIdx);
-    cudaFree(d_rowPtr);
-    cudaFree(d_C);
-    cusparseDestroySpMat(descrA);
-    cusparseDestroyDnMat(descrB);
-    cusparseDestroyDnMat(descrC);
-    cusparseDestroy(handle);
+    // free(h_C);
+    // cudaFree(d_values);
+    // cudaFree(d_colIdx);
+    // cudaFree(d_rowPtr);
+    // cudaFree(d_C);
+    // cusparseDestroySpMat(descrA);
+    // cusparseDestroyDnMat(descrB);
+    // cusparseDestroyDnMat(descrC);
+    // cusparseDestroy(handle);
 
     auto end_time = std::chrono::steady_clock::now();
     std::chrono::duration<double> diff = end_time - start_time;
