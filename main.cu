@@ -63,7 +63,7 @@ int main(int argc, char** argv) {
 
     double* a_C = (double*)malloc(5 * sizeof(double));
 
-    cudaMemcpy(a_C, d_A_values, 5 * sizeof(double), cudaMemcpyDeviceToHost);
+    // cudaMemcpy(a_C, d_A_values, 5 * sizeof(double), cudaMemcpyDeviceToHost);wrong
 
     double values2[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
 
@@ -77,7 +77,7 @@ int main(int argc, char** argv) {
 
     double* b_C = (double*)malloc(9 * sizeof(double));
 
-    cudaMemcpy(b_C, d_B_values, 9 * sizeof(double), cudaMemcpyDeviceToHost);
+    //cudaMemcpy(b_C, d_B_values, 9 * sizeof(double), cudaMemcpyDeviceToHost); wrong 
 
     double* d_values;
     int* d_colIdx;
@@ -91,29 +91,43 @@ int main(int argc, char** argv) {
     cudaMemcpy(d_colIdx, colIdx, 5 * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(d_rowPtr, rowPtr, 4 * sizeof(int), cudaMemcpyHostToDevice);
 
-
-    // double* d_C;
+    /// double* d_C;
     // cudaMalloc((void**)&d_C, 9 * sizeof(double));
 
-    // size_t buffer_size;
 
-    // int nnzC = 0;
-    // int* nnzTotalDevHostPtr = &nnzC;
 
-    // const float alpha = 1.0;
-    // const float beta = 0.0;
-    /*
-    cusparseSpMMAlg_t alg = CUSPARSE_MM_ALG_DEFAULT;
+    // double valuesC[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
+
+    // cusparseDnMatDescr_t descrC;
+
+    // double* h_C = (double*)malloc(9 * sizeof(double));
+    // cudaMemcpy(h_C, &descrC, 9 * sizeof(double), cudaMemcpyDeviceToHost);
+
+    // std::cout << "Result: " << std::endl;
+    // for (int i = 0; i < 9; i++) {
+    //     std::cout << h_C[i] << " ";
+    // }
 
     cusparseDnMatDescr_t descrC;
-
-    double valuesC[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-
+    double valuesC[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
     double* d_C_values;
     cudaMalloc((void**)&d_C_values, 9 * sizeof(double));
     cudaMemcpy(d_C_values, valuesC, 9 * sizeof(double), cudaMemcpyHostToDevice);
-
     cusparseCreateDnMat(&descrC, 3, 3, 3, d_C_values, CUDA_R_64F, CUSPARSE_ORDER_ROW);
+    
+
+    //bug below
+
+    size_t buffer_size;
+
+    int nnzC = 0;
+    int* nnzTotalDevHostPtr = &nnzC;
+
+    const float alpha = 1.0;
+    const float beta = 0;
+    
+    cusparseSpMMAlg_t alg = CUSPARSE_MM_ALG_DEFAULT;
+
     cusparseSpMM_bufferSize(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
                             CUSPARSE_OPERATION_NON_TRANSPOSE, (void*)&alpha, descrA, descrB,
                             (void*)&beta, descrC, CUDA_R_64F, alg, &buffer_size);
@@ -125,82 +139,24 @@ int main(int argc, char** argv) {
 
     cusparseSpMM(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
                  (void*)&alpha, descrA, descrB, (void*)&beta, descrC, CUDA_R_64F, alg, buffer);
-   */
-   
-   
-   
-    // double valuesC[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-  
-   
-    // cusparseDnMatDescr_t descrC;
+   //bug above 
 
+    double* valuesdv;
+    int64_t rows;
+    int64_t cols;
+    int64_t ld;
+    cudaDataType cuda_data_type;
+    cusparseOrder_t order;
+    cusparseDnMatGet(descrC, &rows, &cols, &ld, (void**)&valuesdv, &cuda_data_type, &order);
+    double* h_C = new double[9];
+    cudaMemcpy(h_C, valuesdv, 9 * sizeof(double), cudaMemcpyDeviceToHost);
+    std::cout << "Result: " << std::endl;
+    for (int i = 0; i < 9; i++) {
+        std::cout << h_C[i] << " ";
+    }
+    delete[] h_C;
+    cudaFree(d_C_values);
 
-    
-
-
-
-    // double* h_C = (double*)malloc(9 * sizeof(double));
-    // cudaMemcpy(h_C, &descrC, 9 * sizeof(double), cudaMemcpyDeviceToHost);
-
-
-
-    // std::cout << "Result: " << std::endl;
-    // for (int i = 0; i < 9; i++) {
-    //     std::cout << h_C[i] << " ";
-    // }
-
-// works somewhat
-	cusparseDnMatDescr_t descrC;
-
-	double valuesC[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-
-	double* d_C_values;
-	cudaMalloc((void**)&d_C_values, 9 * sizeof(double));
-	cudaMemcpy(d_C_values, valuesC, 9 * sizeof(double), cudaMemcpyHostToDevice);
-
-	cusparseCreateDnMat(&descrC, 3, 3, 3, d_C_values, CUDA_R_64F, CUSPARSE_ORDER_ROW);
-
-	std::cout << "Result: " << std::endl;
-
-
-       double* valuesdv;
-       int64_t rows;
-       int64_t cols;
-       int64_t ld;
-       cudaDataType cuda_data_type;
-       cusparseOrder_t order;
-
-
-        cusparseDnMatGet(
-                descrC,
-                &rows, 
-                &cols, 
-                &ld, 
-                (void **) &valuesdv,
-                &cuda_data_type,
-                &order			                
-        );
-
-
-
-
-
-	double* h_C = new double[9];
-        
-
-
-	cudaMemcpy(h_C, valuesdv, 9 * sizeof(double), cudaMemcpyDeviceToHost);
-
-	for (int i = 0; i < 9; i++) {
-		std::cout << h_C[i] << " ";
-	}
-	delete[] h_C;
-	cudaFree(d_C_values);
-
-
-
-
-    // free(h_C);
     // cudaFree(d_values);
     // cudaFree(d_colIdx);
     // cudaFree(d_rowPtr);
