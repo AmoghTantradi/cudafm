@@ -23,6 +23,65 @@
 // Main Function
 // ==============
 
+/*
+void printCudaSparse(cusparseSpMatDescr_t sparse_descr) {
+  double* values_dev;
+  int32_t* row_indices_dev;
+  int32_t* col_indices_dev;
+  int64_t rows;
+  int64_t cols;
+  int64_t nnz;
+  cusparseIndexType_t rowidx_type;
+  cusparseIndexType_t colidx_type;
+  cusparseIndexBase_t idx_base;
+  cudaDataType cuda_data_type;
+
+  cusparseCsrGet(
+    sparse_descr,
+    &rows,
+    &cols,
+    &nnz,
+    (void**)&row_indices_dev,
+    (void**)&col_indices_dev,
+    (void**)&values_dev,
+    &rowidx_type,
+    &colidx_type,
+    &idx_base,
+    &cuda_data_type
+  );
+  double * values_host = new double[nnz];
+  int32_t* row_indices_host = new int32_t[nnz];
+  int32_t* col_indices_host = new int32_t[nnz];
+  cudaMemcpy(values_host, values_dev, nnz*sizeof(double), cudaMemcpyDeviceToHost);
+  cudaMemcpy(row_indices_host, row_indices_dev, nnz*sizeof(int32_t), cudaMemcpyDeviceToHost);
+  cudaMemcpy(col_indices_host, col_indices_dev, nnz*sizeof(int32_t), cudaMemcpyDeviceToHost);
+  std:: cout << "Host values " << std::endl;
+  for (int64_t i = 0 ; i < nnz; i++) {
+        std::cout << values_host[i] << std::endl;
+  }
+  std::cout << std::endl;
+  delete [] values_host;
+}
+
+void printCudaDense(cusparseDnMatDescr_t descrC) {
+    double* valuesdv;
+    int64_t rows;
+    int64_t cols;
+    int64_t ld;
+    cudaDataType cuda_data_type;
+    cusparseOrder_t order;
+    cusparseDnMatGet(descrC, &rows, &cols, &ld, (void**)&valuesdv, &cuda_data_type, &order);
+    double* h_C = new double[9];
+    cudaMemcpy(h_C, valuesdv, 9 * sizeof(double), cudaMemcpyDeviceToHost);
+    std::cout << "Result: " << std::endl;
+    for (int i = 0; i < 9; i++) {
+        std::cout << h_C[i] << " ";
+    }
+    std::cout << std::endl;
+    delete[] h_C;
+}
+*/
+
 int main(int argc, char** argv) {
     // const std::string param_train_file	= "../data/ml-tag.test.libfm"; // "libfm_test.txt";
     // // const std::string param_train_file	= "../scripts/libfm_test_data_large.txt"; //
@@ -53,17 +112,40 @@ int main(int argc, char** argv) {
     int colIdx[5] = {0, 2, 1, 0, 2};
     int rowPtr[4] = {0, 2, 3, 5};
 
+
     double* d_A_values;
+    int* devrows;
+    int* devcols;
     cudaMalloc((void**)&d_A_values, 5 * sizeof(double));
+    cudaMalloc((void**) &devrows, 4 * sizeof(int));
+    cudaMalloc((void**)&devcols, 5 * sizeof(int));
+
+
     cudaMemcpy(d_A_values, values, 5 * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(devrows, rowPtr, 4 * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(devcols, colIdx, 5 * sizeof(int), cudaMemcpyHostToDevice);
+
 
     cusparseSpMatDescr_t descrA;
-    cusparseCreateCsr(&descrA, 3, 3, 5, rowPtr, colIdx, d_A_values, CUSPARSE_INDEX_32I,
+    cusparseCreateCsr(&descrA, 3, 3, 5, devrows, devcols, d_A_values, CUSPARSE_INDEX_32I,
                       CUSPARSE_INDEX_32I, CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F);
 
-    double* a_C = (double*)malloc(5 * sizeof(double));
 
     // cudaMemcpy(a_C, d_A_values, 5 * sizeof(double), cudaMemcpyDeviceToHost);wrong
+    std:: cout << "Current matrix A" << std::endl;
+    //printCudaSparse(descrA);
+
+    double *Ahost = (double*) malloc(sizeof(double) * 5);
+    cudaMemcpy(Ahost, d_A_values, sizeof(double) * 5, cudaMemcpyDeviceToHost);
+
+    for (int i=0; i < 5; i++) {
+        std::cout << Ahost[i] << " ";
+    }
+    std::cout << std::endl;
+
+    // turns out that any modifications to descrA also modifies device ptr d_A_values, so we might not need printCudaSparse
+
+
 
     double values2[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
 
@@ -73,7 +155,7 @@ int main(int argc, char** argv) {
     cudaMalloc((void**)&d_B_values, 9 * sizeof(double));
     cudaMemcpy(d_B_values, values2, 9 * sizeof(double), cudaMemcpyHostToDevice);
 
-    cusparseCreateDnMat(&descrB, 3, 3, 3, d_B_values, CUDA_R_64F, CUSPARSE_ORDER_ROW);
+    cusparseCreateDnMat(&descrB, 3, 3, 3, d_B_values, CUDA_R_64F, CUSPARSE_ORDER_ROW); //ld is number of rows of matrix
 
     double* b_C = (double*)malloc(9 * sizeof(double));
 
@@ -91,22 +173,21 @@ int main(int argc, char** argv) {
     cudaMemcpy(d_colIdx, colIdx, 5 * sizeof(int), cudaMemcpyHostToDevice);
     cudaMemcpy(d_rowPtr, rowPtr, 4 * sizeof(int), cudaMemcpyHostToDevice);
 
+
+    std::cout << "Current matrix B" << std::endl;
+
+    double* Bhost = (double*) malloc(sizeof(double) * 9);
+    cudaMemcpy(Bhost, d_B_values, sizeof(double) * 9, cudaMemcpyDeviceToHost);
+
+    for (int i = 0; i < 9; i++){
+        std::cout << Bhost[i] << " " ;
+    }
+    std::cout << std::endl;
+
+    //printCudaDense(descrB);
+
     /// double* d_C;
     // cudaMalloc((void**)&d_C, 9 * sizeof(double));
-
-
-
-    // double valuesC[9] = {1, 0, 0, 0, 1, 0, 0, 0, 1};
-
-    // cusparseDnMatDescr_t descrC;
-
-    // double* h_C = (double*)malloc(9 * sizeof(double));
-    // cudaMemcpy(h_C, &descrC, 9 * sizeof(double), cudaMemcpyDeviceToHost);
-
-    // std::cout << "Result: " << std::endl;
-    // for (int i = 0; i < 9; i++) {
-    //     std::cout << h_C[i] << " ";
-    // }
 
     cusparseDnMatDescr_t descrC;
     double valuesC[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -115,46 +196,56 @@ int main(int argc, char** argv) {
     cudaMemcpy(d_C_values, valuesC, 9 * sizeof(double), cudaMemcpyHostToDevice);
     cusparseCreateDnMat(&descrC, 3, 3, 3, d_C_values, CUDA_R_64F, CUSPARSE_ORDER_ROW);
     
+    std::cout << "Current matrix C" << std::endl;
 
-    //bug below
+    double* dHost = (double *) malloc(sizeof(double) * 9);
+    cudaMemcpy(dHost, d_C_values, sizeof(double) * 9, cudaMemcpyDeviceToHost);
 
-    size_t buffer_size;
+
+       
+    for(int i = 0; i < 9; i++) {
+        std::cout << dHost[i] << " " ;
+    }
+    std:: cout << std::endl;
+
+    size_t buffer_size = 0;
 
     int nnzC = 0;
-    int* nnzTotalDevHostPtr = &nnzC;
+    int* nnzTotalDevHostPtr = &nnzC;  // what's this for ? 
 
     const float alpha = 1.0;
     const float beta = 0;
     
-    cusparseSpMMAlg_t alg = CUSPARSE_MM_ALG_DEFAULT;
+    //cusparseSpMMAlg_t alg = ;
 
     cusparseSpMM_bufferSize(handle, CUSPARSE_OPERATION_NON_TRANSPOSE,
                             CUSPARSE_OPERATION_NON_TRANSPOSE, (void*)&alpha, descrA, descrB,
-                            (void*)&beta, descrC, CUDA_R_64F, alg, &buffer_size);
+                            (void*)&beta, descrC, CUDA_R_64F, CUSPARSE_SPMM_ALG_DEFAULT, &buffer_size);
 
-    cudaDeviceSynchronize();
-
-    void* buffer = 0;
+    void* buffer = NULL;
+    std::cout <<"buffer_size " << buffer_size << std::endl;
     cudaMalloc(&buffer, buffer_size);
 
     cusparseSpMM(handle, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_NON_TRANSPOSE,
-                 (void*)&alpha, descrA, descrB, (void*)&beta, descrC, CUDA_R_64F, alg, buffer);
-   //bug above 
+                 (void*)&alpha, descrA, descrB, (void*)&beta, descrC, CUDA_R_64F, CUSPARSE_SPMM_ALG_DEFAULT, buffer);
 
-    double* valuesdv;
-    int64_t rows;
-    int64_t cols;
-    int64_t ld;
-    cudaDataType cuda_data_type;
-    cusparseOrder_t order;
-    cusparseDnMatGet(descrC, &rows, &cols, &ld, (void**)&valuesdv, &cuda_data_type, &order);
-    double* h_C = new double[9];
-    cudaMemcpy(h_C, valuesdv, 9 * sizeof(double), cudaMemcpyDeviceToHost);
-    std::cout << "Result: " << std::endl;
-    for (int i = 0; i < 9; i++) {
-        std::cout << h_C[i] << " ";
+
+    std:: cout << "Result of matmul" <<std::endl;
+    //printCudaDense(descrC);    
+   
+    cudaMemcpy(dHost, d_C_values, sizeof(double) * 9, cudaMemcpyDeviceToHost);
+
+
+    std::cout << "DC values " << std:: endl; // this will store all the modified values as well
+    for(int i = 0; i < 9; i++) {
+        std::cout << dHost[i] << " " ;
     }
-    delete[] h_C;
+
+
+
+
+
+
     cudaFree(d_C_values);
 
     // cudaFree(d_values);
