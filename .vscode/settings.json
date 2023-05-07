@@ -61,6 +61,7 @@
         "cinttypes": "cpp",
         "typeinfo": "cpp",
         "__nullptr": "cpp",
-        "filesystem": "cpp"
+        "filesystem": "cpp",
+        "unordered_set": "cpp"
     }
 }

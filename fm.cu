@@ -3,21 +3,29 @@
 #include <vector>
 #include <iomanip>
 #include "util/random.h"
+#include <unordered_set>
 
 #define NUM_THREADS 256
-
 
 fm_model::fm_model(int n, int k) {
 	init_mean = 0;
 	init_stdev = 0.01;
 
 	double* vTemp = (double*)malloc(n*k * sizeof(double));
+	double* vTempsq = (double*) malloc(n * k * sizeof(double));
 	for (int i = 0; i < n*k; i++) {
 		vTemp[i] = ran_gaussian(init_mean, init_stdev);
+		vTempsq[i] = vTemp[i] * vTemp[i];
 	}
 	cudaMalloc((void**)&v, sizeof(double) * n * k);
+	cudaMalloc((void**)&v2, sizeof(double) * n * k);
+
+
 	cudaMemcpy(v, vTemp, sizeof(double) * n * k, cudaMemcpyHostToDevice);
+	cudaMemcpy(v2, vTempsq, sizeof(double) * n * k, cudaMemcpyHostToDevice);
+
 	free(vTemp);
+	free(vTempsq);
 
 	double* wTemp = (double*)malloc(n * sizeof(double));
 	for (int i = 0; i < n; i++) {
@@ -26,6 +34,7 @@ fm_model::fm_model(int n, int k) {
 	cudaMalloc((void**)&w, sizeof(double) * n);
 	cudaMemcpy(w, wTemp, sizeof(double) * n, cudaMemcpyHostToDevice);
 	free(wTemp);
+
 	double w0Temp = 0;
 	cudaMalloc((void**)&w0, sizeof(double));
 	cudaMemcpy(w0, &w0Temp, sizeof(double), cudaMemcpyHostToDevice);
@@ -33,7 +42,13 @@ fm_model::fm_model(int n, int k) {
 	cudaMalloc((void**)&m_sum_sqr, n * sizeof(double));
 	params.num_attribute = n;
 	params.num_factor = k;
+
+	// initializes cusparseSpMatDescr_t V, cusparseSpMatDescr_t V_2 
+	cusparseCreateDnMat(&V, params.num_attribute, params.num_factor, params.num_attribute, v, CUDA_R_64F, CUSPARSE_ORDER_ROW);
+	cusparseCreateDnMat(&V_2, params.num_attribute, params.num_factor, params.num_attribute, v2, CUDA_R_64F, CUSPARSE_ORDER_ROW);
 }
+
+
 
 __global__ void cudaPredict(sparse_row_v<DATA_FLOAT>* x, double* sum, double* sum_sqr, cudaArgs* args) {
 	int tid = threadIdx.x + blockDim.x * blockIdx.x;
@@ -69,8 +84,6 @@ double fm_model::predict(sparse_row_v<DATA_FLOAT>* x, double* sum, double* sum_s
 	// want to batch x 
 	//also want to make sure our x doesn't have any overlap in our features 
 
-	//could we use something like union_find? if find(xj) is null, then we know there's no intersection with our set of sparse rows. 
-	
 
     double pred;
     cudaMemcpy(ret, w0, sizeof(double), cudaMemcpyDeviceToDevice);
@@ -103,7 +116,169 @@ double fm_model::predict(sparse_row_v<DATA_FLOAT>* x, double* sum, double* sum_s
 
 // 	return pred;
 // }
+
+void fm_model::batchSamples(Data* train, std::vector<std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t>> &batches) {
+	int* csr_offsets = new int[train->data.size()+1];
+	csr_offsets[0] = 0;
+	int cnt = 0;
+	for (int i = 0; i < train->data.size(); i++) {
+		cnt += train->data[i]->size;
+		csr_offsets[i+1] = cnt;
+	}
+	int* csr_columns = new int[cnt];
+	double* csr_values = (double *) malloc(sizeof(double)*cnt);
+	double* csr_values2 = (double *) malloc(sizeof(double)*cnt);
+	int idx = 0;
+	for (int i = 0; i < train->data.size(); i++) {
+		for(int j = 0; j < train->data[i]->size; j++) {
+			csr_columns[idx] = train->data[i]->data[j].id;
+			csr_values[idx] = train->data[i]->data[j].value;
+			csr_values2[idx] = train->data[i]->data[j].value*train->data[i]->data[j].value;
+			idx++;
+		}
+	}
+	//cuda put this into big sparse matrices
+	int start = 0;
+	idx = 0;
+	int rows = 0;
+	std::unordered_set<int> feature_ids;
+	for (int i = 0; i < train->data.size(); i++) {
+		bool repeat = false;
+		csr_offsets[i] -= start;
+		for (int j = 0; j < train->data[i]->size; j++) {
+			if (feature_ids.count(train->data[i]->data[j].id)) {
+				repeat = true;
+				break;
+			}
+		}
+		if (repeat) {
+			int nnz = idx - start;
+			int   *dX_csrOffsets, *dX_columns;
+    		double *dX_values, *dX2_values;
+			cudaMalloc((void**) &dX_csrOffsets,
+                           (rows + 1) * sizeof(int));
+
+			cudaMalloc((void**) &dX_columns, nnz * sizeof(int));
+			cudaMalloc((void**) &dX_values,  nnz * sizeof(double));
+			cudaMalloc((void**) &dX2_values,  nnz * sizeof(double));
+
+			cudaMemcpy(dX_csrOffsets, csr_offsets+i-rows,
+								(rows + 1) * sizeof(int),
+								cudaMemcpyHostToDevice);
+			cudaMemcpy(dX_columns, csr_columns + start, nnz * sizeof(int),
+								cudaMemcpyHostToDevice);
+			cudaMemcpy(dX_values, csr_values + start, nnz * sizeof(double),
+								cudaMemcpyHostToDevice);
+			cudaMemcpy(dX2_values, csr_values2 + start, nnz * sizeof(double),
+								cudaMemcpyHostToDevice);
+
+			cusparseSpMatDescr_t matX;
+			// Create sparse matrix A in CSR format
+			cusparseCreateCsr(&matX, rows, (int)params.num_attribute, nnz,
+											dX_csrOffsets, dX_columns, dX_values,
+											CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
+                                      		CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F);
+			
+			cusparseSpMatDescr_t matX2;
+			// Create sparse matrix A in CSR format
+			cusparseCreateCsr(&matX2, rows, (int)params.num_attribute, nnz,
+											dX_csrOffsets, dX_columns, dX2_values,
+											CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
+                                      		CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F);
+			rows = 0;
+			start = idx;
+			batches.push_back(std::make_pair(matX, matX2));
+			feature_ids.clear();
+		}
+		++rows;
+		for (int j = 0; j < train->data[i]->size; ++j) {
+			feature_ids.insert(train->data[i]->data[j].id);
+		}
+		idx += train->data[i]->size;
+	}
+
+	{
+		csr_offsets[train->data.size()] -= start;
+		int nnz = idx - start;
+		int   *dX_csrOffsets, *dX_columns;
+		double *dX_values, *dX2_values;
+		cudaMalloc((void**) &dX_csrOffsets,
+						(rows + 1) * sizeof(int));
+
+		cudaMalloc((void**) &dX_columns, nnz * sizeof(int));
+		cudaMalloc((void**) &dX_values,  nnz * sizeof(double));
+		cudaMalloc((void**) &dX2_values,  nnz * sizeof(double));
+
+		cudaMemcpy(dX_csrOffsets, csr_offsets+train->data.size()-rows,
+							(rows + 1) * sizeof(int),
+							cudaMemcpyHostToDevice);
+		cudaMemcpy(dX_columns, csr_columns + start, nnz * sizeof(int),
+							cudaMemcpyHostToDevice);
+		cudaMemcpy(dX_values, csr_values + start, nnz * sizeof(double),
+							cudaMemcpyHostToDevice);
+		cudaMemcpy(dX2_values, csr_values2 + start, nnz * sizeof(double),
+							cudaMemcpyHostToDevice);
+
+		cusparseSpMatDescr_t matX;
+		// Create sparse matrix A in CSR format
+		cusparseCreateCsr(&matX, rows, (int)params.num_attribute, nnz,
+										dX_csrOffsets, dX_columns, dX_values,
+										CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
+										CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F);
+		
+		cusparseSpMatDescr_t matX2;
+		// Create sparse matrix A in CSR format
+		cusparseCreateCsr(&matX2, rows, (int)params.num_attribute, nnz,
+										dX_csrOffsets, dX_columns, dX2_values,
+										CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
+										CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F);
+		rows = 0;
+		start = idx;
+		batches.push_back(std::make_pair(matX, matX2));
+	}
+
+	
+}
+
+
+//take in batch (can be x or x2) and multiply by v and store in result 
+void matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparseDnMatDescr_t& result) {
+	void* dBuffer = NULL;
+    size_t bufferSize = 0;
+
+	cusparseHandle_t     handle = NULL;
+
+	double alpha           = 1.0;
+    double beta            = 0.0;
+
+	cusparseCreate(&handle);
+
+
+	cusparseSpMM_bufferSize(
+							handle,
+							CUSPARSE_OPERATION_NON_TRANSPOSE,
+							CUSPARSE_OPERATION_NON_TRANSPOSE,
+							&alpha, A, B, &beta, result, CUDA_R_64F,
+							CUSPARSE_SPMM_ALG_DEFAULT, &bufferSize)
+							;
+    cudaMalloc(&dBuffer, bufferSize);
+
+	cusparseSpMM(handle,
+                                 CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                 CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                 &alpha, A, B, &beta, result, CUDA_R_64F,
+                                 CUSPARSE_SPMM_ALG_DEFAULT, dBuffer);
+
+
+}
+
 void fm_model::learn(Data* train, Data* test, int num_iter) {
+
+	//call batch samples here 
+
+
+	/*
+
     for (int i = 0; i < train->data.size(); i++) {
 		sparse_row_v<DATA_FLOAT>* sample;
 		int memsize = sizeof(sparse_row_v<DATA_FLOAT>) + train->data[i]->size*sizeof(sparse_entry<DATA_FLOAT>);
@@ -112,12 +287,19 @@ void fm_model::learn(Data* train, Data* test, int num_iter) {
 		
 		train->data[i] = sample;
 	}
+	*/
+	std::vector<std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t>> training_batches;
+	batchSamples(train, training_batches);
 
 	cudaMalloc((void**)&cuda_args, sizeof(cudaArgs));
 	cudaArgs args;
 	args.w0 = w0;
 	args.w = w;
 	args.v = v;
+
+	args.v2 = v2;
+
+
 	args.params = params;
 	cudaMalloc((void**)&ret, sizeof(double));
 	args.ret = ret;
