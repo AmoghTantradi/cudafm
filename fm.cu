@@ -341,6 +341,7 @@ void fm_model::predict(std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t> bat
 	free(vTemp);
 	free(xivh);
 	free(x2iv2h);
+	cudaFree()
 	//will have to free our cudaMallocs too!
 	//will have to also destroy our intermediate cusparseDnMats too!
 }
