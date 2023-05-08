@@ -35,8 +35,6 @@ class fm_model {
 		double* w;
 		double* v;
 		double* v2;
-		double* m_sum;
-		double* m_sum_sqr;
 		fm_params params;
 		cudaArgs* cuda_args;
 		double* ret;
@@ -48,6 +46,12 @@ class fm_model {
 		
 		double init_stdev;
 		double init_mean;
+		int maxBatch = 1;
+
+		double* xiv;
+		double* x2iv2;
+		cusparseDnMatDescr_t xv;
+		cusparseDnMatDescr_t x2v2;
 		
 		std::vector<int> pointsPerBatch;  // stores the number of rows per batch. This avoids having to make a call to cusparseSpMatGet everytime. 
 		cusparseDnMatDescr_t V	;
@@ -70,6 +74,7 @@ class fm_model {
 		void SGD(sparse_row_v<FM_FLOAT>* x, const double multiplier, double *sum);
 		void batchSamples(Data* train, std::vector<std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t>> &batches);
 		void matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparseDnMatDescr_t& result);
+		void setSize(int batchSize);
 };
 
  
