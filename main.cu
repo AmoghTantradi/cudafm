@@ -108,19 +108,20 @@ int main(int argc, char** argv) {
     std::vector<std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t>> batches;
     std::default_random_engine rng(std::chrono::system_clock::now().time_since_epoch().count());
     std::shuffle(train.data.begin(), train.data.end(), rng);
-    fm.batchSamples(&train, batches);
+    //fm.batchSamples(&train, batches);
 
-    std::cout << batches.size() << " batches for " << train.data.size() << " samples \n";
-    int idx = 0;
+    //std::cout << batches.size() << " batches for " << train.data.size() << " samples \n";
 
+    fm.learn(&train, NULL, 1); 
 
+    /*
     for (int i = 0; i < 10000; i++) {
-        /*
+        
         std::cout << "here" << std::endl;
-        printCudaSparse(batches[i].first);
+        //printCudaSparse(batches[i].first);
 
-        printCudaSparse(batches[i].second);
-        */
+        //printCudaSparse(batches[i].second);
+        
         // make result matrix
         cusparseDnMatDescr_t result;
         // have to allocate device memory too
@@ -168,6 +169,13 @@ int main(int argc, char** argv) {
  
     //   break;
     }
+
+    */
+
+
+
+
+
 
 
     //device memory deallocation

@@ -49,7 +49,7 @@ class fm_model {
 		double init_stdev;
 		double init_mean;
 		
-		std::vector<int> rowsPerBatch;  // stores the number of rows per batch. This avoids having to make a call to cusparseSpMatGet everytime. 
+		std::vector<int> pointsPerBatch;  // stores the number of rows per batch. This avoids having to make a call to cusparseSpMatGet everytime. 
 		cusparseDnMatDescr_t V	;
 		cusparseDnMatDescr_t V_2;
 
@@ -61,6 +61,7 @@ class fm_model {
 		void init();
 		double predict(sparse_row_v<FM_FLOAT>* x);
 		double predict(sparse_row_v<FM_FLOAT>* x, double* sum, double* sum_sqr);
+		void predict(std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t> batch, int batchSize,  double* preds);
 		void predict(Data* data, double* out);
 		double evaluate(Data* data);
 		void learn(Data* train, Data* test, int num_iter);
@@ -69,11 +70,6 @@ class fm_model {
 		void SGD(sparse_row_v<FM_FLOAT>* x, const double multiplier, double *sum);
 		void batchSamples(Data* train, std::vector<std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t>> &batches);
 		void matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparseDnMatDescr_t& result);
-		//void matMul(cusparseSpMatDescr_t batch, cusparseDnMatDescr_t& result);
-		//double predict(sparse_entry<FM_FLOAT>* x, int xsize, double* sum, double* sum_sqr);
-		//void SGD(sparse_entry<FM_FLOAT>* x, int xsize);
-		//void learn(std::vector<std::pair<sparse_entry<FM_FLOAT>*, int>> trainX, std::vector<double> trainY, std::vector<std::pair<sparse_entry<FM_FLOAT>*,int>> testX, std::vector<double> testY, int num_iter);
-	
 };
 
  

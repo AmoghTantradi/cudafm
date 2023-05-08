@@ -167,6 +167,7 @@ void fm_model::batchSamples(Data* train, std::vector<std::pair<cusparseSpMatDesc
 											dX_csrOffsets, dX_columns, dX2_values,
 											CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
                                       		CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F);
+			pointsPerBatch.push_back(rows);
 			rows = 0;
 			start = idx;
 			batches.push_back(std::make_pair(matX, matX2));
@@ -214,6 +215,7 @@ void fm_model::batchSamples(Data* train, std::vector<std::pair<cusparseSpMatDesc
 										dX_csrOffsets, dX_columns, dX2_values,
 										CUSPARSE_INDEX_32I, CUSPARSE_INDEX_32I,
 										CUSPARSE_INDEX_BASE_ZERO, CUDA_R_64F);
+		pointsPerBatch.push_back(rows);
 		rows = 0;
 		start = idx;
 		batches.push_back(std::make_pair(matX, matX2));
@@ -224,7 +226,7 @@ void fm_model::batchSamples(Data* train, std::vector<std::pair<cusparseSpMatDesc
 
 
 //take in batch (can be x or x2) and multiply by v and store in result 
-void fm_model::matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparseDnMatDescr_t& result, cusparseOperation_t Aop = CUSPARSE_OPERATION_NON_TRANSPOSE, cusparseOperation_t Bop = CUSPARSE_OPERATION_NON_TRANSPOSE) {
+void fm_model::matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparseDnMatDescr_t& result) {
 	void* dBuffer = NULL;
     size_t bufferSize = 0;
 
@@ -236,15 +238,15 @@ void fm_model::matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparse
 
 	cusparseSpMM_bufferSize(
 							handle,
-							Aop,
-							Bop,
+							CUSPARSE_OPERATION_NON_TRANSPOSE,
+							CUSPARSE_OPERATION_NON_TRANSPOSE,
 							&alpha, A, B, &beta, result, CUDA_R_64F,
 							CUSPARSE_SPMM_ALG_DEFAULT, &bufferSize);
     cudaMalloc(&dBuffer, bufferSize);
 
 	cusparseSpMM(handle,
-                                 Aop,
-                                 Bop,
+                                 CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                 CUSPARSE_OPERATION_NON_TRANSPOSE,
                                  &alpha, A, B, &beta, result, CUDA_R_64F,
                                  CUSPARSE_SPMM_ALG_DEFAULT, dBuffer);
 
@@ -278,15 +280,16 @@ void fm_model::predict(std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t> bat
 	// step 3, step 4 done here 
 
 	//first need to square v 
+	//need to cudamemcpy into host for this too
 
-	for (int i = 0; i < params.num_attributes * params.num_factor ; i++) {
-		v2[i] = v[i] * v[i];
+	double* vTemp = (double *) malloc(sizeof(double) * params.num_attribute * params.num_factor);
+	cudaMemcpy(vTemp, v, sizeof(double) * params.num_attribute * params.num_factor, cudaMemcpyDeviceToHost);
+	for (int i = 0; i < params.num_attribute * params.num_factor ; i++) {
+		vTemp[i] *= vTemp[i];
 	}
+	cudaMemcpy(v2, vTemp, sizeof(double) * params.num_attribute * params.num_factor, cudaMemcpyHostToDevice);
 
-	//now perform (Xi V)^T(Xi V)  and multiply by q vector 
-
-
-
+	//finished squaring v 
 
 	//load v, v2 into V and V2
 
@@ -296,51 +299,50 @@ void fm_model::predict(std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t> bat
 	//create intermediate result for sotring the product of Xi and V 
 
 	double* xiv; // xv 
-	double* xiv2; //(xv)^2
-	double* x2iv2 //x^2v^2
+	double* x2iv2; //x^2v^2
+
 	cudaMalloc((void **) &xiv, sizeof(double) * batchSize * params.num_factor); 
 
 	cudaMalloc((void **) &x2iv2, sizeof(double) * batchSize * params.num_factor);
 
-	cudaMalloc((void **) &xiv2, sizeof(double) * params.num_factor * params.num_factor);
 
 	cusparseDnMatDescr_t xv;
-
 	cusparseDnMatDescr_t x2v2;
 
-	cusparseDnMatDescr_t xv2; // xv the whole squared 
 
 	cusparseCreateDnMat(&xv, batchSize, params.num_factor, params.num_factor, xiv, CUDA_R_64F, CUSPARSE_ORDER_ROW);
 	
 	cusparseCreateDnMat(&x2v2, batchSize, params.num_factor, params.num_factor, x2iv2, CUDA_R_64F, CUSPARSE_ORDER_ROW);
 
-	cusparseCreateDnMat(&xv2, params.num_factor, params.num_factor, params.num_factor, xiv2, CUDA_R_64F, CUSPARSE_ORDER_ROW);
+
+	//matmul. Only does SPMM!
+	matMul(batch.first, V, xv); // xv, xiv will now contain XV 
+
+	matMul(batch.second, V_2, x2v2); //x2v2, x2iv2 will now contain x^2 v^2
+
+	//host pointers to copy result into
+	double* xivh = (double*) malloc(sizeof(double) * batchSize * params.num_factor);
+	double* x2iv2h = (double*) malloc(sizeof(double) * batchSize * params.num_factor);
 
 
-	matMul(batch[0], V, xv); // xv, xiv will now contain XV 
-
-	matMul(batch[1], V_2, x2v2); //x2v2, x2iv2 will now contain x^2 v^2
-
-	//now do xv.T @ xv 
-	matmul(xv, xv, xv2, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE);
-
+	//copying result into host pointers
+	cudaMemcpy(xivh, xiv, sizeof(double) * batchSize * params.num_factor, cudaMemcpyDeviceToHost);
+	cudaMemcpy(x2iv2h, x2iv2, sizeof(double) * batchSize * params.num_factor, cudaMemcpyDeviceToHost);
+	
 
 	//now we sum up the columns of each matrix and subtract 
 
-
 	for (int i = 0; i < batchSize; i++) {
 		for(int j = 0; j < params.num_factor; j++) {
-			preds[i] -= 0.5 * (x2iv2[i][j]);
+			preds[i] += 0.5 * xivh[i * params.num_factor + j] * xivh[i * params.num_factor + j] - 0.5 * (x2iv2h[i * params.num_factor + j]);
 		}
-		preds[i] += 0.5 * x2iv2[i][i];
 	}
 
-
-	
-
-
-
-
+	free(vTemp);
+	free(xivh);
+	free(x2iv2h);
+	//will have to free our cudaMallocs too!
+	//will have to also destroy our intermediate cusparseDnMats too!
 }
 
 
@@ -349,8 +351,12 @@ void fm_model::learn(Data* train, Data* test, int num_iter) {
 
 	//call batch samples here 
 
+	std::cout <<"Learn called" << std::endl;
+
 	std::vector<std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t>> training_batches;
 	batchSamples(train, training_batches);
+
+	std::cout << "batched training samples" << std::endl;
 
 	cudaMalloc((void**)&cuda_args, sizeof(cudaArgs));
 	cudaArgs args;
@@ -366,12 +372,7 @@ void fm_model::learn(Data* train, Data* test, int num_iter) {
 	args.ret = ret;
 	cudaMemcpy(cuda_args, &args, sizeof(cudaArgs), cudaMemcpyHostToDevice);
 
-
-
-	
-
-
-    for (int i = 0; i < num_iter; i++) {
+    //for (int i = 0; i < num_iter; i++) {
 
 		//use batches here instead 
 		/*
@@ -388,18 +389,26 @@ void fm_model::learn(Data* train, Data* test, int num_iter) {
         	SGD(train->data[j], mult, m_sum); // serialize this (kernels will probably make it slower)
         }*/
 		// loop over predictions, create our own mult array / vector based off of those predictions
-		for (int j = 0; j < training_batches.size(); j++) {
-			double* p = (double *) malloc(sizeof(double) * rowsPerBatch[j]); // create predictions for each batch element			
-			predict(training_batches[j], rowsPerBatch[j], p);
+		//for (int j = 0; j < training_batches.size(); j++) {
+	for (int b = 0; b < 10; b++){
+		double* p = (double *) malloc(sizeof(double) * pointsPerBatch[b]); // create predictions for each batch element	
+		std::cout << "Made prediction vector" << std::endl;		
+		std::cout << "Batch size for batch " << b << " is: " << pointsPerBatch[b] << std ::endl;
+		predict(training_batches[b], pointsPerBatch[b], p);
+
+
+			//}
+			//double rmse_train = evaluate(train);
+		for (int i = 0; i < pointsPerBatch[b]; i++) {
+			std::cout << "Prediction for data point " << i << ": " << p[i] << std::endl;
 		}
-        double rmse_train = evaluate(train);
+	}
 
 
-
-    }
+    //}
 }
 
-
+/*
 __global__ void cudaSGD(sparse_row_v<DATA_FLOAT>* x, const double multiplier, double *sum, cudaArgs* args) {
 	int tid = threadIdx.x + blockDim.x * blockIdx.x;
 	if (tid == 0) {
@@ -432,9 +441,9 @@ void fm_model::SGD(sparse_row_v<DATA_FLOAT>* x, const double multiplier, double 
 
 
 //predict
-void fm_model::predict(Data* data, double* out) {
+void fm_model::predict(Data* data, double* out) { // should take in a batch 
   for (int i = 0; i < data->data.size(); i++) {
-    double p = predict(data->data[i]);
+    double p = predict(data->data[i]); // supposed to call predict(x, m_sum, m_sum_sqr) 
     if (params.task == 0 ) {
       p = std::min(params.max_target, p);
       p = std::max(params.min_target, p);
@@ -446,6 +455,40 @@ void fm_model::predict(Data* data, double* out) {
     out[i] = p;
   }
 }
+
+
+
+
+double fm_model::predict(sparse_row_v<FM_FLOAT>& x) {
+	return predict(x, m_sum, m_sum_sqr);		
+}
+
+double fm_model::predict(sparse_row_v<FM_FLOAT>& x, DVector<double> &sum, DVector<double> &sum_sqr) {
+	double result = 0;
+	if (k0) {	
+		result += w0;
+	}
+	if (k1) {
+		for (uint i = 0; i < x.size; i++) {
+			assert(x.data[i].id < num_attribute);
+			result += w(x.data[i].id) * x.data[i].value;
+		}
+	}
+	for (int f = 0; f < num_factor; f++) {
+		sum(f) = 0;
+		sum_sqr(f) = 0;
+		for (uint i = 0; i < x.size; i++) {
+			double d = v(f,x.data[i].id) * x.data[i].value;
+			sum(f) += d;
+			sum_sqr(f) += d*d;
+		}
+		result += 0.5 * (sum(f)*sum(f) - sum_sqr(f));
+	}
+	return result;
+}
+
+
+
 
 double fm_model::evaluate_classification(Data* data) {
   int num_correct = 0;
@@ -484,4 +527,4 @@ double fm_model::evaluate(Data* data) {
     throw "unknown task";
   }
 }
-
+*/
