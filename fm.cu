@@ -82,28 +82,7 @@ __global__ void aggregate(double * ret, double * sum, double * sum_sqr, cudaArgs
 	atomicAdd(ret, 0.5 * (sum[tid] * sum[tid] - sum_sqr[tid]));
 }
 
-double fm_model::predict(sparse_row_v<DATA_FLOAT>* x, double* sum, double* sum_sqr) {
 
-	// want to batch x 
-	//also want to make sure our x doesn't have any overlap in our features 
-
-
-    double pred;
-    cudaMemcpy(ret, w0, sizeof(double), cudaMemcpyDeviceToDevice);
-
-    cudaMemset(sum, 0, sizeof(double) * params.num_factor);
-    cudaMemset(sum_sqr, 0, sizeof(double) * params.num_factor);
-
-    int num_blocks = (3 * params.num_factor + NUM_THREADS - 1) / NUM_THREADS;
-    size_t shared_mem_size = 2 * params.num_factor * sizeof(double);
-
-    cudaPredict<<<num_blocks, NUM_THREADS, shared_mem_size>>>(x, sum, sum_sqr, cuda_args);
-    aggregate<<<1, NUM_THREADS>>>(ret, sum, sum_sqr, cuda_args);
-
-    cudaMemcpy(&pred, ret, sizeof(double), cudaMemcpyDeviceToHost);
-
-    return pred;
-}
 
 // double fm_model::predict(sparse_row_v<DATA_FLOAT>* x, double* sum, double* sum_sqr) {
 // 	double pred;
@@ -245,7 +224,7 @@ void fm_model::batchSamples(Data* train, std::vector<std::pair<cusparseSpMatDesc
 
 
 //take in batch (can be x or x2) and multiply by v and store in result 
-void fm_model::matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparseDnMatDescr_t& result) {
+void fm_model::matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparseDnMatDescr_t& result, cusparseOperation_t Aop = CUSPARSE_OPERATION_NON_TRANSPOSE, cusparseOperation_t Bop = CUSPARSE_OPERATION_NON_TRANSPOSE) {
 	void* dBuffer = NULL;
     size_t bufferSize = 0;
 
@@ -257,20 +236,114 @@ void fm_model::matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparse
 
 	cusparseSpMM_bufferSize(
 							handle,
-							CUSPARSE_OPERATION_NON_TRANSPOSE,
-							CUSPARSE_OPERATION_NON_TRANSPOSE,
+							Aop,
+							Bop,
 							&alpha, A, B, &beta, result, CUDA_R_64F,
 							CUSPARSE_SPMM_ALG_DEFAULT, &bufferSize);
     cudaMalloc(&dBuffer, bufferSize);
 
 	cusparseSpMM(handle,
-                                 CUSPARSE_OPERATION_NON_TRANSPOSE,
-                                 CUSPARSE_OPERATION_NON_TRANSPOSE,
+                                 Aop,
+                                 Bop,
                                  &alpha, A, B, &beta, result, CUDA_R_64F,
                                  CUSPARSE_SPMM_ALG_DEFAULT, dBuffer);
 
 
 }
+
+
+
+
+void fm_model::predict(std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t> batch, int batchSize,  double* preds) {
+
+	// want to batch x 
+	//also want to make sure our x doesn't have any overlap in our features 
+	/*
+
+    cudaMemcpy(ret, w0, sizeof(double), cudaMemcpyDeviceToDevice);
+
+    cudaMemset(sum, 0, sizeof(double) * params.num_factor);
+    cudaMemset(sum_sqr, 0, sizeof(double) * params.num_factor);
+
+    int num_blocks = (3 * params.num_factor + NUM_THREADS - 1) / NUM_THREADS;
+    size_t shared_mem_size = 2 * params.num_factor * sizeof(double);
+
+    cudaPredict<<<num_blocks, NUM_THREADS, shared_mem_size>>>(x, sum, sum_sqr, cuda_args);
+    aggregate<<<1, NUM_THREADS>>>(ret, sum, sum_sqr, cuda_args);
+
+    cudaMemcpy(&pred, ret, sizeof(double), cudaMemcpyDeviceToHost);
+
+	*/
+
+	// step 3, step 4 done here 
+
+	//first need to square v 
+
+	for (int i = 0; i < params.num_attributes * params.num_factor ; i++) {
+		v2[i] = v[i] * v[i];
+	}
+
+	//now perform (Xi V)^T(Xi V)  and multiply by q vector 
+
+
+
+
+	//load v, v2 into V and V2
+
+	cusparseCreateDnMat(&V, params.num_attribute, params.num_factor, params.num_factor, v, CUDA_R_64F, CUSPARSE_ORDER_ROW);
+	cusparseCreateDnMat(&V_2, params.num_attribute, params.num_factor, params.num_factor, v2, CUDA_R_64F, CUSPARSE_ORDER_ROW); 
+
+	//create intermediate result for sotring the product of Xi and V 
+
+	double* xiv; // xv 
+	double* xiv2; //(xv)^2
+	double* x2iv2 //x^2v^2
+	cudaMalloc((void **) &xiv, sizeof(double) * batchSize * params.num_factor); 
+
+	cudaMalloc((void **) &x2iv2, sizeof(double) * batchSize * params.num_factor);
+
+	cudaMalloc((void **) &xiv2, sizeof(double) * params.num_factor * params.num_factor);
+
+	cusparseDnMatDescr_t xv;
+
+	cusparseDnMatDescr_t x2v2;
+
+	cusparseDnMatDescr_t xv2; // xv the whole squared 
+
+	cusparseCreateDnMat(&xv, batchSize, params.num_factor, params.num_factor, xiv, CUDA_R_64F, CUSPARSE_ORDER_ROW);
+	
+	cusparseCreateDnMat(&x2v2, batchSize, params.num_factor, params.num_factor, x2iv2, CUDA_R_64F, CUSPARSE_ORDER_ROW);
+
+	cusparseCreateDnMat(&xv2, params.num_factor, params.num_factor, params.num_factor, xiv2, CUDA_R_64F, CUSPARSE_ORDER_ROW);
+
+
+	matMul(batch[0], V, xv); // xv, xiv will now contain XV 
+
+	matMul(batch[1], V_2, x2v2); //x2v2, x2iv2 will now contain x^2 v^2
+
+	//now do xv.T @ xv 
+	matmul(xv, xv, xv2, CUSPARSE_OPERATION_NON_TRANSPOSE, CUSPARSE_OPERATION_TRANSPOSE);
+
+
+	//now we sum up the columns of each matrix and subtract 
+
+
+	for (int i = 0; i < batchSize; i++) {
+		for(int j = 0; j < params.num_factor; j++) {
+			preds[i] -= 0.5 * (x2iv2[i][j]);
+		}
+		preds[i] += 0.5 * x2iv2[i][i];
+	}
+
+
+	
+
+
+
+
+}
+
+
 
 void fm_model::learn(Data* train, Data* test, int num_iter) {
 
@@ -295,7 +368,13 @@ void fm_model::learn(Data* train, Data* test, int num_iter) {
 
 
 
+	
+
+
     for (int i = 0; i < num_iter; i++) {
+
+		//use batches here instead 
+		/*
         for (int j = 0; j < train->data.size(); j++) {
         	double p = predict(train->data[j], m_sum, m_sum_sqr);  // prediction is here 
         	double mult = 0;
@@ -307,8 +386,16 @@ void fm_model::learn(Data* train, Data* test, int num_iter) {
 				mult = -train->target[j]*(1.0-1.0/(1.0+exp(-train->target[j]*p)));
 			}
         	SGD(train->data[j], mult, m_sum); // serialize this (kernels will probably make it slower)
-        }
+        }*/
+		// loop over predictions, create our own mult array / vector based off of those predictions
+		for (int j = 0; j < training_batches.size(); j++) {
+			double* p = (double *) malloc(sizeof(double) * rowsPerBatch[j]); // create predictions for each batch element			
+			predict(training_batches[j], rowsPerBatch[j], p);
+		}
         double rmse_train = evaluate(train);
+
+
+
     }
 }
 
@@ -335,16 +422,12 @@ __global__ void cudaSGD(sparse_row_v<DATA_FLOAT>* x, const double multiplier, do
 }
 
 void fm_model::SGD(sparse_row_v<DATA_FLOAT>* x, const double multiplier, double *sum) {
-
 	//serialize 
 	cudaSGD<<<1, NUM_THREADS>>>(x, multiplier, sum, cuda_args);
 }
 
 
 
-double fm_model::predict(sparse_row_v<DATA_FLOAT>* x) {
-	return predict(x, m_sum, m_sum_sqr);
-}
 
 
 

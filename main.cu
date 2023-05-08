@@ -66,8 +66,6 @@ void printCudaSparse(cusparseSpMatDescr_t sparse_descr) {
   delete [] values_host;
 }
 
-
-/*
 void printCudaDense(cusparseDnMatDescr_t descrC) {
     double* valuesdv;
     int64_t rows;
@@ -85,7 +83,6 @@ void printCudaDense(cusparseDnMatDescr_t descrC) {
     std::cout << std::endl;
     delete[] h_C;
 }
-*/
 
 int main(int argc, char** argv) {
     auto start_time = std::chrono::steady_clock::now();
@@ -163,9 +160,10 @@ int main(int argc, char** argv) {
         //cudaMemcpy(devptr, host, sizeof(double) * rows * 8, cudaMemcpyHostToDevice);
         //std::cout << "here2: " << rows << std::endl;
         //std::cout << "here3: " << cols << std::endl;
-        cusparseCreateDnMat(&result, rows, 8, cols, &devptr, CUDA_R_64F, CUSPARSE_ORDER_ROW); 
+        cusparseCreateDnMat(&result, rows, 8, cols, devptr, CUDA_R_64F, CUSPARSE_ORDER_ROW); 
         //std::cout << "created dn\n";
         fm.matMul(batches[i].first, fm.V, result);
+
 
  
     //   break;

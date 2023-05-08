@@ -13,8 +13,8 @@
 struct fm_params {
 	double learn_rate;
 	int task = 0;
-	uint num_attribute;
-	int num_factor;
+	uint num_attribute; //num_features (f or n) 
+	int num_factor; // num_factors (k) 
 	double min_target;
 	double max_target;
 };
@@ -48,9 +48,9 @@ class fm_model {
 		
 		double init_stdev;
 		double init_mean;
-
 		
-		cusparseDnMatDescr_t V;
+		std::vector<int> rowsPerBatch;  // stores the number of rows per batch. This avoids having to make a call to cusparseSpMatGet everytime. 
+		cusparseDnMatDescr_t V	;
 		cusparseDnMatDescr_t V_2;
 
 
