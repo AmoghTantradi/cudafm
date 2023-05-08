@@ -465,9 +465,9 @@ int main(int argc, char** argv) {
         //cudaMemcpy(devptr, host, sizeof(double) * rows * 8, cudaMemcpyHostToDevice);
         //std::cout << "here2: " << rows << std::endl;
         //std::cout << "here3: " << cols << std::endl;
-        cusparseCreateDnMat(&result, rows, 8, rows, &devptr, CUDA_R_64F, CUSPARSE_ORDER_ROW); 
+        cusparseCreateDnMat(&result, rows, 8, cols, &devptr, CUDA_R_64F, CUSPARSE_ORDER_ROW); 
         //std::cout << "created dn\n";
-        matMul(batches[i].first, fm.V, result);
+        fm.matMul(batches[i].first, fm.V, result);
 
  
     //   break;

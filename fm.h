@@ -54,6 +54,8 @@ class fm_model {
 		cusparseDnMatDescr_t V_2;
 
 
+		cusparseHandle_t handle = NULL; // should be only created once.
+
 
 		fm_model(int n, int k); // n features, k is the rank 
 		void init();
@@ -66,7 +68,7 @@ class fm_model {
 		double evaluate_regression(Data* data);
 		void SGD(sparse_row_v<FM_FLOAT>* x, const double multiplier, double *sum);
 		void batchSamples(Data* train, std::vector<std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t>> &batches);
-		void createV();
+		void matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparseDnMatDescr_t& result);
 		//void matMul(cusparseSpMatDescr_t batch, cusparseDnMatDescr_t& result);
 		//double predict(sparse_entry<FM_FLOAT>* x, int xsize, double* sum, double* sum_sqr);
 		//void SGD(sparse_entry<FM_FLOAT>* x, int xsize);

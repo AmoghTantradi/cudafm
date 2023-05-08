@@ -43,9 +43,12 @@ fm_model::fm_model(int n, int k) {
 	params.num_attribute = n;
 	params.num_factor = k;
 
+
+	cusparseCreate(&handle);
+
 	// initializes cusparseSpMatDescr_t V, cusparseSpMatDescr_t V_2 
-	cusparseCreateDnMat(&V, params.num_attribute, params.num_factor, params.num_attribute, v, CUDA_R_64F, CUSPARSE_ORDER_ROW);
-	cusparseCreateDnMat(&V_2, params.num_attribute, params.num_factor, params.num_attribute, v2, CUDA_R_64F, CUSPARSE_ORDER_ROW);
+	cusparseCreateDnMat(&V, params.num_attribute, params.num_factor, params.num_factor, v, CUDA_R_64F, CUSPARSE_ORDER_ROW);
+	cusparseCreateDnMat(&V_2, params.num_attribute, params.num_factor, params.num_factor, v2, CUDA_R_64F, CUSPARSE_ORDER_ROW);
 }
 
 
@@ -242,16 +245,14 @@ void fm_model::batchSamples(Data* train, std::vector<std::pair<cusparseSpMatDesc
 
 
 //take in batch (can be x or x2) and multiply by v and store in result 
-void matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparseDnMatDescr_t& result) {
+void fm_model::matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparseDnMatDescr_t& result) {
 	void* dBuffer = NULL;
     size_t bufferSize = 0;
 
-	cusparseHandle_t     handle = NULL;
 
 	double alpha           = 1.0;
     double beta            = 0.0;
 
-	cusparseCreate(&handle);
 
 
 	cusparseSpMM_bufferSize(
