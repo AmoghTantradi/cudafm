@@ -112,7 +112,7 @@ double fm_model::predict(sparse_row_v<DATA_FLOAT>* x, double* sum, double* sum_s
 // 	cudaMemset(sum, 0, sizeof(int) * params.num_factor);
 // 	cudaMemset(sum_sqr, 0, sizeof(int) * params.num_factor);
 
-// 	cudaPredict<<<1, NUM_THREADS>>>(x, sum, sum_sqr, cuda_args);
+// 	cudaPredict<<<1, NUM_THREADS>>>(x, sum, sum_sqr, cuda_args);  // multiply X and V, X2 and V2  (get quadratic term). multiply X with w to get linear term. mu
 // 	aggregate<<<1, NUM_THREADS>>>(ret, sum, sum_sqr, cuda_args);
 
 // 	cudaMemcpy(&pred, ret, sizeof(double), cudaMemcpyDeviceToHost);
@@ -260,8 +260,7 @@ void fm_model::matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparse
 							CUSPARSE_OPERATION_NON_TRANSPOSE,
 							CUSPARSE_OPERATION_NON_TRANSPOSE,
 							&alpha, A, B, &beta, result, CUDA_R_64F,
-							CUSPARSE_SPMM_ALG_DEFAULT, &bufferSize)
-							;
+							CUSPARSE_SPMM_ALG_DEFAULT, &bufferSize);
     cudaMalloc(&dBuffer, bufferSize);
 
 	cusparseSpMM(handle,
@@ -277,18 +276,6 @@ void fm_model::learn(Data* train, Data* test, int num_iter) {
 
 	//call batch samples here 
 
-
-	/*
-
-    for (int i = 0; i < train->data.size(); i++) {
-		sparse_row_v<DATA_FLOAT>* sample;
-		int memsize = sizeof(sparse_row_v<DATA_FLOAT>) + train->data[i]->size*sizeof(sparse_entry<DATA_FLOAT>);
-		cudaMalloc((void**)&sample, memsize);
-		cudaMemcpy(sample, train->data[i], memsize, cudaMemcpyHostToDevice);
-		
-		train->data[i] = sample;
-	}
-	*/
 	std::vector<std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t>> training_batches;
 	batchSamples(train, training_batches);
 
@@ -306,9 +293,11 @@ void fm_model::learn(Data* train, Data* test, int num_iter) {
 	args.ret = ret;
 	cudaMemcpy(cuda_args, &args, sizeof(cudaArgs), cudaMemcpyHostToDevice);
 
+
+
     for (int i = 0; i < num_iter; i++) {
         for (int j = 0; j < train->data.size(); j++) {
-        	double p = predict(train->data[j], m_sum, m_sum_sqr);
+        	double p = predict(train->data[j], m_sum, m_sum_sqr);  // prediction is here 
         	double mult = 0;
 			if (params.task == 0) {
 				p = std::min(params.max_target, p);
@@ -317,7 +306,7 @@ void fm_model::learn(Data* train, Data* test, int num_iter) {
 			} else if (params.task == 1) {
 				mult = -train->target[j]*(1.0-1.0/(1.0+exp(-train->target[j]*p)));
 			}
-        	SGD(train->data[j], mult, m_sum);
+        	SGD(train->data[j], mult, m_sum); // serialize this (kernels will probably make it slower)
         }
         double rmse_train = evaluate(train);
     }
@@ -346,6 +335,8 @@ __global__ void cudaSGD(sparse_row_v<DATA_FLOAT>* x, const double multiplier, do
 }
 
 void fm_model::SGD(sparse_row_v<DATA_FLOAT>* x, const double multiplier, double *sum) {
+
+	//serialize 
 	cudaSGD<<<1, NUM_THREADS>>>(x, multiplier, sum, cuda_args);
 }
 
