@@ -291,10 +291,6 @@ void fm_model::predict(std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t> bat
 
 	//finished squaring v 
 
-	//load v, v2 into V and V2
-
-	cusparseCreateDnMat(&V, params.num_attribute, params.num_factor, params.num_factor, v, CUDA_R_64F, CUSPARSE_ORDER_ROW);
-	cusparseCreateDnMat(&V_2, params.num_attribute, params.num_factor, params.num_factor, v2, CUDA_R_64F, CUSPARSE_ORDER_ROW); 
 
 	//create intermediate result for sotring the product of Xi and V 
 
@@ -341,7 +337,6 @@ void fm_model::predict(std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t> bat
 	free(vTemp);
 	free(xivh);
 	free(x2iv2h);
-	cudaFree()
 	//will have to free our cudaMallocs too!
 	//will have to also destroy our intermediate cusparseDnMats too!
 }
