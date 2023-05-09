@@ -27,6 +27,18 @@ struct cudaArgs {
 	fm_params params;
 	double* ret;
 };
+
+struct trainBatch {
+	cusparseSpMatDescr_t x;
+	cusparseSpMatDescr_t x2;
+	double* target;
+	int* xCols;
+	double* xVals;
+	int* rowidx;
+	int size;
+	int nnz;
+};
+
 void matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparseDnMatDescr_t& result);
 //assume all pointers exist in CUDA
 class fm_model {
@@ -50,13 +62,26 @@ class fm_model {
 
 		double* xiv;
 		double* x2iv2;
+		double* xiw;
+
+		void* bufferMatmul;
+		void* bufferSpMv;
+		int maxBufferSize = 0;
+
 		cusparseDnMatDescr_t xv;
 		cusparseDnMatDescr_t x2v2;
+
+
+
 		
 		std::vector<int> pointsPerBatch;  // stores the number of rows per batch. This avoids having to make a call to cusparseSpMatGet everytime. 
 		cusparseDnMatDescr_t V	;
 		cusparseDnMatDescr_t V_2;
 
+
+		cusparseDnVecDescr_t w_vec;
+
+		cusparseDnVecDescr_t xw;
 
 		cusparseHandle_t handle = NULL; // should be only created once.
 
@@ -65,14 +90,14 @@ class fm_model {
 		void init();
 		double predict(sparse_row_v<FM_FLOAT>* x);
 		double predict(sparse_row_v<FM_FLOAT>* x, double* sum, double* sum_sqr);
-		void predict(std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t> batch, int batchSize,  double* preds);
+		void predict(trainBatch batch, int batchSize,  double* preds);
 		void predict(Data* data, double* out);
 		double evaluate(Data* data);
-		void learn(Data* train, Data* test, int num_iter);
+		void learn(std::vector<trainBatch> &training_batches, const int num_iter);
 		double evaluate_classification(Data* data);
 		double evaluate_regression(Data* data);
 		void SGD(sparse_row_v<FM_FLOAT>* x, const double multiplier, double *sum);
-		void batchSamples(Data* train, std::vector<std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t>> &batches);
+		void batchSamples(Data* train, std::vector<trainBatch> &batches);
 		void matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparseDnMatDescr_t& result);
 		void setSize(int batchSize);
 };

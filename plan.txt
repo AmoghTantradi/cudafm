@@ -1,0 +1,8 @@
+Predict:
+-results in xv, xv2
+-xv = XV, x2v2=X^2 * V^2
+-xw = XW (SpMV)
+-accumulate pred = 1/2(colsum(xv)**2 - colsum(x2v2))+xw + w0
+-m_sum = xv
+-mult = -target*(1-1/(1+e^(-pred*target)))
+-For storing predictions: make an array in kernel of length num_samples, store each batch in its corresponding spot

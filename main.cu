@@ -85,19 +85,21 @@ void printCudaDense(cusparseDnMatDescr_t descrC) {
 }
 
 int main(int argc, char** argv) {
-    auto start_time = std::chrono::steady_clock::now();
+
     // construct a fm object
     const std::string param_train_file	= "../data/ml-tag.train.libfm"; // "libfm_test.txt";
     // const std::string param_train_file	= "../scripts/libfm_test_data_large.txt"; //
-    "libfm_test.txt";
+    //"libfm_test.txt";
     Data train;
     train.load(param_train_file);
+    /*
     for (int i = 0; i < 10; i++) {
     	std :: cout << train.target[i] << " ";
     	for (int j = 0; j < train.data[i]->size; j++) {
     		std::cout << train.data[i]->data[j].id << ":" << train.data[i]->data[j].value << "\n";
     	}
     }
+    */
 
     std::cout << "Num feature " << train.num_feature << std::endl;
     fm_model fm(train.num_feature, 8);
@@ -105,20 +107,19 @@ int main(int argc, char** argv) {
     fm.params.task = 1;
     fm.params.min_target = train.min_target;
     fm.params.max_target = train.max_target;
-    std::vector<std::pair<cusparseSpMatDescr_t, cusparseSpMatDescr_t>> batches;
-    std::default_random_engine rng(std::chrono::system_clock::now().time_since_epoch().count());
-    std::shuffle(train.data.begin(), train.data.end(), rng);
-    //fm.batchSamples(&train, batches);
-
-    //std::cout << batches.size() << " batches for " << train.data.size() << " samples \n";
-
-    fm.learn(&train, NULL, 1); 
+    std::vector<trainBatch> batches;
+    //std::default_random_engine rng(std::chrono::system_clock::now().time_since_epoch().count());
+    //std::shuffle(train.data.begin(), train.data.end(), rng);
+    fm.batchSamples(&train, batches);
+    std::cout << batches.size() << " batches for " << train.data.size() << " samples \n";
+    auto start_time = std::chrono::steady_clock::now();
+    fm.learn(batches, 1); 
 
     /*
-    for (int i = 0; i < 10000; i++) {
+    for (int i = 0; i < 1; i++) {
         
         std::cout << "here" << std::endl;
-        //printCudaSparse(batches[i].first);
+        printCudaSparse(batches[i].x);
 
         //printCudaSparse(batches[i].second);
         
@@ -139,7 +140,7 @@ int main(int argc, char** argv) {
 
         //std::cout << "here1: " << nnz << std::endl;
         cusparseCsrGet(
-            batches[i].first,
+            batches[i].x,
             &rows,
             &cols,
             &nnz,
@@ -163,17 +164,13 @@ int main(int argc, char** argv) {
         //std::cout << "here3: " << cols << std::endl;
         cusparseCreateDnMat(&result, rows, 8, cols, devptr, CUDA_R_64F, CUSPARSE_ORDER_ROW); 
         //std::cout << "created dn\n";
-        fm.matMul(batches[i].first, fm.V, result);
+        fm.matMul(batches[i].x, fm.V, result);
 
 
  
     //   break;
     }
-
-    */
-
-
-
+*/
 
 
 
