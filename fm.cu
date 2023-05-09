@@ -38,7 +38,6 @@ fm_model::fm_model(int n, int k) {
 	double w0Temp = 0;
 	cudaMalloc((void**)&w0, sizeof(double));
 	cudaMemcpy(w0, &w0Temp, sizeof(double), cudaMemcpyHostToDevice);
-
 	params.num_attribute = n;
 	params.num_factor = k;
 
@@ -141,7 +140,7 @@ void fm_model::batchSamples(Data* train, std::vector<trainBatch> &batches) {
 			trainBatch tbatch;
 			tbatch.x = matX;
 			tbatch.x2 = matX2;
-			tbatch.target = cudaTarget + start;
+			tbatch.target = cudaTarget + i - rows;
 			tbatch.size = rows;
 			tbatch.xCols = dX_columns;
 			tbatch.xVals = dX_values;
@@ -201,7 +200,7 @@ void fm_model::batchSamples(Data* train, std::vector<trainBatch> &batches) {
 		trainBatch tbatch;
 		tbatch.x = matX;
 		tbatch.x2 = matX2;
-		tbatch.target = cudaTarget + start;
+		tbatch.target = cudaTarget +train->data.size()-rows;
 		tbatch.xCols = dX_columns;
 		tbatch.xVals = dX_values;
 		tbatch.rowidx = dX_row_idx;
@@ -396,8 +395,8 @@ __global__ void cudaSGD(double* pred, double* target, double* xv, cudaArgs* args
 	*args->w0 -= args->params.learn_rate * (multiplier);
 	args->w[col] -= args->params.learn_rate * multiplier * batch.xVals[tid];
 	for (int i = 0; i < args->params.num_factor; i++) {
-		//double& v1 = args->v[args->params.num_factor * col + i];
-		//double grad = batch.xVals[tid] * xv[sample*args->params.num_factor+i] - v1 * batch.xVals[tid] * batch.xVals[tid];
+		double& v1 = args->v[args->params.num_factor * col + i];
+		double grad = batch.xVals[tid] * xv[sample*args->params.num_factor+i] - v1 * batch.xVals[tid] * batch.xVals[tid];
 		//v1 -= args->params.learn_rate * (multiplier * grad);
 	}
 
@@ -468,6 +467,7 @@ void fm_model::learn(std::vector<trainBatch> &training_batches, const int num_it
 		//for (int j = 0; j < training_batches.size(); j++) {
 	bool broken = false;
 	for (int num_iters = 0; num_iters < 100; num_iters++) {
+		int correct = 0;
 	for (int b1 = 0; b1 < training_batches.size(); b1++){
 		//std::cout << "Made prediction vector" << std::endl;		
 		//std::cout << "Batch size for batch " << b << " is: " << pointsPerBatch[b] << std ::endl;
@@ -485,25 +485,35 @@ void fm_model::learn(std::vector<trainBatch> &training_batches, const int num_it
 			break;
 		}
 		
-		if (b1 == 0) {
-			double* p = (double*)malloc(sizeof(double)*training_batches[b1].size);
-			//std::cout <<"trying to copy" << std::endl;
-			cudaMemcpy(p, preds, training_batches[b1].size*sizeof(double), cudaMemcpyDeviceToHost);
-			double* p1 = (double*)malloc(sizeof(double)*training_batches[b1].size);
-			//std::cout <<"trying to copy" << std::endl;
-			cudaMemcpy(p1, training_batches[b1].target, training_batches[b1].size*sizeof(double), cudaMemcpyDeviceToHost);
-			int correct = 0;
-			int numzero = 0;
-			for (int i = 0; i < training_batches[b1].size; i++) {
-				 if(p[i]*p1[i] > 0) {
-					++correct;
-				 }
-				 if (p[i] == 0) {
-					++numzero;
-				 }
-				 if(i < 10) std::cout<<p[i] << " ";
-			}
-			std::cout << num_iters << " " << correct << " " << training_batches[b1].size << "\n";
+		{
+			//std::cout << training_batches[b1].size << "\n";
+		double* p = (double*)malloc(sizeof(double)*training_batches[b1].size);
+		//std::cout <<"trying to copy" << std::endl;
+		cudaMemcpy(p, preds, training_batches[b1].size*sizeof(double), cudaMemcpyDeviceToHost);
+		double* p1 = (double*)malloc(sizeof(double)*training_batches[b1].size);
+		//std::cout <<"trying to copy" << std::endl;
+		cudaMemcpy(p1, training_batches[b1].target, training_batches[b1].size*sizeof(double), cudaMemcpyDeviceToHost);
+		
+		cudaError_t err = cudaPeekAtLastError();
+		if (err != cudaSuccess) {
+			std::cerr << "Error420: " << cudaGetErrorString(err) << std::endl;
+			broken = true;
+			std::cout << num_iters << "\n";
+		}
+		int numzero = 0;
+		for (int i = 0; i < training_batches[b1].size; i++) {
+				if(p[i]*p1[i] > 0) {
+				++correct;
+				}
+				if (p[i] == 0) {
+				++numzero;
+				}
+				if(b1 == 0) {
+					if(i < 10) std::cout<<p[i] << " ";
+				}
+		}
+		free(p);
+		free(p1);
 		}
 
 			//}
@@ -514,6 +524,7 @@ void fm_model::learn(std::vector<trainBatch> &training_batches, const int num_it
 		}
 		*/
 	}
+	std::cout << correct << "\n";
 	if (broken) {
 		break;
 	}
