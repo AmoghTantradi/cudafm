@@ -234,10 +234,6 @@ void fm_model::matMul(cusparseSpMatDescr_t &A, cusparseDnMatDescr_t& B, cusparse
 							CUSPARSE_OPERATION_NON_TRANSPOSE,
 							&alpha, A, B, &beta, result, CUDA_R_64F,
 							CUSPARSE_SPMM_ALG_DEFAULT, &bufferSize);
-	// if (bufferSize > maxBufferSize) {
-	// 	maxBufferSize = bufferSize;
-	// 	std::cout << maxBatch << " " << bufferSize << std::endl;
-	// }
     cudaMalloc(&dBuffer, bufferSize);
 
 	
@@ -276,9 +272,7 @@ __global__ void doNothing(double *XV, double* X2V2, double* XW, double* W0) {
 }
 __global__ void sumColumns(double *XV, double* X2V2, double* XW, double* W0, double* preds, int batchSize, int num_factors) {
     int idx = threadIdx.x + blockIdx.x * blockDim.x;
-	//printf("%d", batchSize);
     if (idx < batchSize) {
-		//printf("test1\n");
         double sum = 0.0;
 		preds[idx] = 0.0;
         for (int j = 0; j < num_factors; j++) {
@@ -286,9 +280,7 @@ __global__ void sumColumns(double *XV, double* X2V2, double* XW, double* W0, dou
 			preds[idx] -= 0.5*X2V2[idx*num_factors+j];
         }
         preds[idx] += *W0 + XW[idx] + 0.5*sum*sum;
-    } else {
-		//printf("test2\n");
-	}
+    }
 }
 
 void fm_model::predict(trainBatch batch, int batchSize,  double* preds) {
@@ -301,30 +293,9 @@ void fm_model::predict(trainBatch batch, int batchSize,  double* preds) {
 	matMul(batch.x, V, xv); // xv, xiv will now contain XV 
 	matMul(batch.x2, V_2, x2v2); //x2v2, x2iv2 will now contain x^2 v^2
 	//inline matvec 
-	
-	//size_t bufferSize = 0;
-	//void* buffer;
 	double alpha           = 1.0;
     double beta            = 0.0;
 
-/*
-	cusparseSpMV_bufferSize(handle,
-                        CUSPARSE_OPERATION_NON_TRANSPOSE,
-                        &alpha,
-                        batch.x,  // non-const descriptor supported
-                        w_vec,  // non-const descriptor supported
-                        &beta,
-                        xw,
-                        CUDA_R_64F,
-                        CUSPARSE_SPMV_ALG_DEFAULT,
-                        &bufferSize);
-
-	cudaMalloc(&buffer, bufferSize);
-	if (bufferSize > 8) std::cout<< bufferSize << "\n";
-*/
-	//std::cout<<"bufferSize " << batchSize << " " << bufferSize << std::endl;
-
-	//cudaMalloc(&buffer, 8);
 	cusparseSpMV(handle,
              CUSPARSE_OPERATION_NON_TRANSPOSE,
               &alpha,
@@ -336,48 +307,10 @@ void fm_model::predict(trainBatch batch, int batchSize,  double* preds) {
              CUSPARSE_SPMV_ALG_DEFAULT,
              bufferSpMv);
 
-	// compute preds for NUM_THREADS threads
+
 	int blks = (batchSize + NUM_THREADS - 1) / NUM_THREADS;
-	//std::cout << "Calling sum " << blks << std::endl;
-	/*
-	cudaDeviceSynchronize();
-	cudaError_t err = cudaPeekAtLastError();
-	//doNothing<<<1, 1>>>(xiv, x2iv2, xiw, w0);
-	if (err != cudaSuccess) {
-	 	std::cerr << "Error0: " << cudaGetErrorString(err) << std::endl;
-	}
-	*/
-	// sumColumns<<<blks, NUM_THREADS>>>(xv, x2v2, xw, w0, preds, batchSize, params.num_factor);
 	sumColumns<<<blks, NUM_THREADS>>>(xiv, x2iv2, xiw, w0, preds, batchSize, params.num_factor);
-	//std::cout << "completed sum " << blks << std::endl;
-	// cudaError_t
-	/*
-	cudaDeviceSynchronize();
-	err = cudaGetLastError();
-	if (err != cudaSuccess) {
-		std::cerr << "Error1: " << cudaGetErrorString(err) << std::endl;
-	}
-	*/
-	// err = cudaPeekAtLastError();
-	// if (err != cudaSuccess) {
-	// 	std::cerr << "Error3: " << cudaGetErrorString(err) << std::endl;
-	// }
-	/*
-	for (int i = 0; i < batchSize; ++i) {
-        sumColumns(xv, x2v2, xw, w0, preds, batchSize, params.num_factor);
-		double pred = preds[i];
-        double target = batch.target[i];
-        double mult = -target * (1 - 1 / (1 + fexp(-pred * target))); // TODO: replace with fast sigmoid
 
-        // Store the prediction in the corresponding spot in preds array
-        preds[batch.startIdx + i] = pred;
-    }*/
-
-	
-	
-	
-	//will have to free our cudaMallocs too!
-	//will have to also destroy our intermediate cusparseDnMats too!
 }
 
 
@@ -393,31 +326,16 @@ __global__ void cudaSGD(double* pred, double* target, double* xv, cudaArgs* args
 
 	
 	*args->w0 -= args->params.learn_rate * (multiplier);
-	args->w[col] -= args->params.learn_rate * multiplier * batch.xVals[tid];
+	atomicAdd(&args->w[col], -(args->params.learn_rate * multiplier * batch.xVals[tid])/3.0);
 	for (int i = 0; i < args->params.num_factor; i++) {
-		double& v1 = args->v[args->params.num_factor * col + i];
+		double v1 = args->v[args->params.num_factor * col + i];
 		double grad = batch.xVals[tid] * xv[sample*args->params.num_factor+i] - v1 * batch.xVals[tid] * batch.xVals[tid];
-		//v1 -= args->params.learn_rate * (multiplier * grad);
+		if (fabs(grad) < 0.5) {
+			args->v[args->params.num_factor * col + i] -= args->params.learn_rate * (multiplier * grad + 0.01 * v1);
+			v1 = args->v[args->params.num_factor * col + i];
+			args->v2[args->params.num_factor * col + i] = v1*v1;
+		}
 	}
-
-	/*
-	for (uint i = 0; i < x->size; i++) {
-		args->w[i] -= args->params.learn_rate * (multiplier * x->data[i].value);
-	}
-	int nf = args -> params.num_factor;
-
-	int f = int(tid / nf); // corresponds to f
-	int idx = tid - f * nf; // corresponds to i
-
-
-	if(f == 0) {
-		args->w[idx] -= args->params.learn_rate * (multiplier * x->data[idx].value);
-	}
-
-	double& v1 = args->v[f * args->params.num_attribute + x->data[idx].id];
-	double grad = sum[f] * x->data[idx].value - v1 * x->data[idx].value * x->data[idx].value;
-	v1 -= args->params.learn_rate * (multiplier * grad);
-	*/
 }
 
 void fm_model::learn(std::vector<trainBatch> &training_batches, const int num_iter) {
@@ -446,34 +364,14 @@ void fm_model::learn(std::vector<trainBatch> &training_batches, const int num_it
 	double* preds;
 	cudaMalloc((void**)&preds, sizeof(double)*maxBatch);
 	
-
-    //for (int i = 0; i < num_iter; i++) {
-
-		//use batches here instead 
-		/*
-        for (int j = 0; j < train->data.size(); j++) {
-        	double p = predict(train->data[j], m_sum, m_sum_sqr);  // prediction is here 
-        	double mult = 0;
-			if (params.task == 0) {
-				p = std::min(params.max_target, p);
-				p = std::max(params.min_target, p);
-				mult = -(train->target[j]-p);
-			} else if (params.task == 1) {
-				mult = -train->target[j]*(1.0-1.0/(1.0+exp(-train->target[j]*p)));
-			}
-        	SGD(train->data[j], mult, m_sum); // serialize this (kernels will probably make it slower)
-        }*/
-		// loop over predictions, create our own mult array / vector based off of those predictions
-		//for (int j = 0; j < training_batches.size(); j++) {
 	bool broken = false;
 	for (int num_iters = 0; num_iters < 100; num_iters++) {
 		int correct = 0;
 	for (int b1 = 0; b1 < training_batches.size(); b1++){
-		//std::cout << "Made prediction vector" << std::endl;		
-		//std::cout << "Batch size for batch " << b << " is: " << pointsPerBatch[b] << std ::endl;
 		predict(training_batches[b1], training_batches[b1].size, preds);
 		int blks = (training_batches[b1].nnz+NUM_THREADS-1)/NUM_THREADS;
 		cudaSGD<<<blks, NUM_THREADS>>>(preds, training_batches[b1].target, xiv, cuda_args, training_batches[b1]);	
+		cudaDeviceSynchronize();
 		cudaError_t err = cudaPeekAtLastError();
 		if (err != cudaSuccess) {
 			std::cerr << "Error69: " << cudaGetErrorString(err) << std::endl;
@@ -486,12 +384,9 @@ void fm_model::learn(std::vector<trainBatch> &training_batches, const int num_it
 		}
 		
 		{
-			//std::cout << training_batches[b1].size << "\n";
 		double* p = (double*)malloc(sizeof(double)*training_batches[b1].size);
-		//std::cout <<"trying to copy" << std::endl;
 		cudaMemcpy(p, preds, training_batches[b1].size*sizeof(double), cudaMemcpyDeviceToHost);
 		double* p1 = (double*)malloc(sizeof(double)*training_batches[b1].size);
-		//std::cout <<"trying to copy" << std::endl;
 		cudaMemcpy(p1, training_batches[b1].target, training_batches[b1].size*sizeof(double), cudaMemcpyDeviceToHost);
 		
 		cudaError_t err = cudaPeekAtLastError();
@@ -515,14 +410,6 @@ void fm_model::learn(std::vector<trainBatch> &training_batches, const int num_it
 		free(p);
 		free(p1);
 		}
-
-			//}
-			//double rmse_train = evaluate(train);
-			/*
-		for (int i = 0; i < pointsPerBatch[b]; i++) {
-			std::cout << "Prediction for data point " << i << ": " << p[i] << std::endl;
-		}
-		*/
 	}
 	std::cout << correct << "\n";
 	if (broken) {
@@ -530,127 +417,4 @@ void fm_model::learn(std::vector<trainBatch> &training_batches, const int num_it
 	}
 	}
 
-
-    //}
 }
-
-/*
-__global__ void cudaSGD(sparse_row_v<DATA_FLOAT>* x, const double multiplier, double *sum, cudaArgs* args) {
-	int tid = threadIdx.x + blockDim.x * blockIdx.x;
-	if (tid == 0) {
-		*args->w0 -= args->params.learn_rate * (multiplier);
-	}
-	if (tid >= x->size * args -> params.num_factor) return;
-	int nf = args -> params.num_factor;
-
-	int f = int(tid / nf);
-	int idx = tid - f * nf;
-
-
-	if(f == 0) {
-		args->w[idx] -= args->params.learn_rate * (multiplier * x->data[idx].value);
-	}
-
-	double& v1 = args->v[f * args->params.num_attribute + x->data[idx].id];
-	double grad = sum[f] * x->data[idx].value - v1 * x->data[idx].value * x->data[idx].value;
-	v1 -= args->params.learn_rate * (multiplier * grad);
-}
-
-void fm_model::SGD(sparse_row_v<DATA_FLOAT>* x, const double multiplier, double *sum) {
-	//serialize 
-	cudaSGD<<<1, NUM_THREADS>>>(x, multiplier, sum, cuda_args);
-}
-
-
-
-
-
-
-//predict
-void fm_model::predict(Data* data, double* out) { // should take in a batch 
-  for (int i = 0; i < data->data.size(); i++) {
-    double p = predict(data->data[i]); // supposed to call predict(x, m_sum, m_sum_sqr) 
-    if (params.task == 0 ) {
-      p = std::min(params.max_target, p);
-      p = std::max(params.min_target, p);
-    } else if (params.task == 1) {
-      p = 1.0/(1.0 + exp(-p));
-    } else {
-      throw "task not supported";
-    }
-    out[i] = p;
-  }
-}
-
-
-
-
-double fm_model::predict(sparse_row_v<FM_FLOAT>& x) {
-	return predict(x, m_sum, m_sum_sqr);		
-}
-
-double fm_model::predict(sparse_row_v<FM_FLOAT>& x, DVector<double> &sum, DVector<double> &sum_sqr) {
-	double result = 0;
-	if (k0) {	
-		result += w0;
-	}
-	if (k1) {
-		for (uint i = 0; i < x.size; i++) {
-			assert(x.data[i].id < num_attribute);
-			result += w(x.data[i].id) * x.data[i].value;
-		}
-	}
-	for (int f = 0; f < num_factor; f++) {
-		sum(f) = 0;
-		sum_sqr(f) = 0;
-		for (uint i = 0; i < x.size; i++) {
-			double d = v(f,x.data[i].id) * x.data[i].value;
-			sum(f) += d;
-			sum_sqr(f) += d*d;
-		}
-		result += 0.5 * (sum(f)*sum(f) - sum_sqr(f));
-	}
-	return result;
-}
-
-
-
-
-double fm_model::evaluate_classification(Data* data) {
-  int num_correct = 0;
-  for (int i = 0; i < data->data.size(); i++) {
-    double p = predict(data->data[i]);
-    if (((p >= 0) && (data->target[i] >= 0)) || ((p < 0) && (data->target[i] < 0))) {
-      num_correct++;
-    }
-  }
-
-  return (double) num_correct / (double) data->data.size();
-}
-
-double fm_model::evaluate_regression(Data* data) {
-  double rmse_sum_sqr = 0;
-  double mae_sum_abs = 0;
-  for (int i = 0; i < data->data.size(); i++) {
-    double p = predict(data->data[i]);
-    p = std::min(params.max_target, p);
-    p = std::max(params.min_target, p);
-    double err = p - data->target[i];
-    rmse_sum_sqr += err*err;
-    mae_sum_abs += std::abs((double)err);
-  }
-
-  return std::sqrt(rmse_sum_sqr/data->data.size());
-}
-
-double fm_model::evaluate(Data* data) {
-  //assert(data->data != NULL);
-  if (params.task == 0) {
-    return evaluate_regression(data);
-  } else if (params.task == 1) {
-    return evaluate_classification(data);
-  } else {
-    throw "unknown task";
-  }
-}
-*/
