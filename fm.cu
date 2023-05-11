@@ -4,6 +4,8 @@
 #include <iomanip>
 #include "util/random.h"
 #include <unordered_set>
+#include <chrono>
+
 
 #define NUM_THREADS 256
 
@@ -95,7 +97,7 @@ void fm_model::batchSamples(Data* train, std::vector<trainBatch> &batches) {
 			row_idx[idx] = rows;
 			idx++;
 			if (feature_ids.count(train->data[i]->data[j].id)) {
-				repeat = (rows > 2000);
+				repeat = (rows > 25000);
 			}
 		}
 		if (repeat) {
@@ -364,11 +366,23 @@ void fm_model::learn(std::vector<trainBatch> &training_batches, const int num_it
 	double* preds;
 	cudaMalloc((void**)&preds, sizeof(double)*maxBatch);
 	
+
 	bool broken = false;
-	for (int num_iters = 0; num_iters < 100; num_iters++) {
+	for (int num_iters = 0; num_iters < 1; num_iters++) {
 		int correct = 0;
 	for (int b1 = 0; b1 < training_batches.size(); b1++){
+
+		auto start_time = std::chrono::steady_clock::now();
 		predict(training_batches[b1], training_batches[b1].size, preds);
+
+
+		auto end_time = std::chrono::steady_clock::now();
+		std::chrono::duration<double> diff = end_time - start_time;
+		double seconds = diff.count();
+
+		predictTime += seconds;
+
+
 		int blks = (training_batches[b1].nnz+NUM_THREADS-1)/NUM_THREADS;
 		cudaSGD<<<blks, NUM_THREADS>>>(preds, training_batches[b1].target, xiv, cuda_args, training_batches[b1]);	
 		cudaDeviceSynchronize();
@@ -376,7 +390,7 @@ void fm_model::learn(std::vector<trainBatch> &training_batches, const int num_it
 		if (err != cudaSuccess) {
 			std::cerr << "Error69: " << cudaGetErrorString(err) << std::endl;
 			broken = true;
-			std::cout << num_iters << "\n";
+			//std::cout << num_iters << "\n";
 		}
 		
 		if (broken) {
@@ -393,7 +407,7 @@ void fm_model::learn(std::vector<trainBatch> &training_batches, const int num_it
 		if (err != cudaSuccess) {
 			std::cerr << "Error420: " << cudaGetErrorString(err) << std::endl;
 			broken = true;
-			std::cout << num_iters << "\n";
+			//std::cout << num_iters << "\n";
 		}
 		int numzero = 0;
 		for (int i = 0; i < training_batches[b1].size; i++) {
@@ -404,14 +418,14 @@ void fm_model::learn(std::vector<trainBatch> &training_batches, const int num_it
 				++numzero;
 				}
 				if(b1 == 0) {
-					if(i < 10) std::cout<<p[i] << " ";
+					//if(i < 10) std::cout<<p[i] << " ";
 				}
 		}
 		free(p);
 		free(p1);
 		}
 	}
-	std::cout << correct << "\n";
+	//std::cout << "Correct " << correct  << " Percentage "<< (float)(correct / 1404801.0) << "\n" ;
 	if (broken) {
 		break;
 	}

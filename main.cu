@@ -185,10 +185,11 @@ int main(int argc, char** argv) {
     
 
     auto end_time = std::chrono::steady_clock::now();
-
 	std::chrono::duration<double> diff = end_time - start_time;
 	double seconds = diff.count();
 
 		// Finalize
-	std::cout << "Simulation Time = " << seconds << " seconds \n";
+	std::cout << "Total Simulation Time for SGD = " << seconds << " seconds \n";
+    std::cout << "Simulation Time for predict" << fm.predictTime << std::endl;
+    std::cout << "Time for SGD without predict" << seconds - fm.predictTime << std::endl;
 }

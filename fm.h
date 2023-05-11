@@ -67,6 +67,7 @@ class fm_model {
 		void* bufferMatmul;
 		void* bufferSpMv;
 		int maxBufferSize = 0;
+		double predictTime = 0;
 
 		cusparseDnMatDescr_t xv;
 		cusparseDnMatDescr_t x2v2;
